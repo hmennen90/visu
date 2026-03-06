@@ -45,6 +45,9 @@ import app
 @visu.command.dump_signal_handlers: VISU\Command\SignalDumpCommand(@visu.dispatcher)
     = command: 'signals:dump'
 
+@visu.command.world_editor: VISU\Command\WorldEditorCommand
+    = command: 'world-editor'
+
 /**
  * Maker / CodeGenerator
  *

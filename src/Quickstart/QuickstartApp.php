@@ -17,8 +17,11 @@ use VISU\Graphics\Rendering\{
     RenderPass, 
     RenderPipeline
 };
+use VISU\Audio\AudioManager;
+use VISU\OS\GamepadManager;
 use VISU\OS\Input;
 use VISU\OS\{Window, WindowHints};
+use VISU\SDL3\SDL;
 use VISU\Runtime\GameLoopDelegate;
 use VISU\Signal\Dispatcher;
 use VISU\OS\InputContextMap;
@@ -111,6 +114,16 @@ class QuickstartApp implements GameLoopDelegate
     private ?ProfilerInterface $profiler = null;
 
     /**
+     * SDL3 Audio Manager (null when SDL3 audio is not enabled)
+     */
+    public ?AudioManager $audio = null;
+
+    /**
+     * SDL3 Gamepad Manager (null when gamepad support is not enabled)
+     */
+    public ?GamepadManager $gamepad = null;
+
+    /**
      * QuickstartApp constructor.
      * 
      * @param Container $container 
@@ -201,6 +214,26 @@ class QuickstartApp implements GameLoopDelegate
         // create the fullscreen texture renderer
         $this->fullscreenTextureRenderer = new FullscreenTextureRenderer($this->gl);
         $this->dbgOverlayRenderer = new QuickstartDebugMetricsOverlay($this->container);
+
+        // initialize SDL3 subsystems if requested
+        if ($options->enableSDL3Audio || $options->enableGamepad) {
+            $sdl   = SDL::getInstance();
+            $flags = 0;
+            if ($options->enableSDL3Audio) {
+                $flags |= SDL::INIT_AUDIO;
+            }
+            if ($options->enableGamepad) {
+                $flags |= SDL::INIT_GAMEPAD | SDL::INIT_EVENTS;
+            }
+            $sdl->init($flags);
+
+            if ($options->enableSDL3Audio) {
+                $this->audio = new AudioManager($sdl);
+            }
+            if ($options->enableGamepad) {
+                $this->gamepad = new GamepadManager($sdl, $this->dispatcher);
+            }
+        }
     }
 
     /**
@@ -212,6 +245,11 @@ class QuickstartApp implements GameLoopDelegate
     public function ready() : void
     {
         $this->options->ready?->__invoke($this);
+
+        // bind the gamepad manager as a system if enabled so it gets registered
+        if ($this->gamepad !== null) {
+            $this->bindSystem($this->gamepad);
+        }
 
         // auto register all system from the registry
         $this->registerSystems($this->entities);
@@ -238,6 +276,14 @@ class QuickstartApp implements GameLoopDelegate
 
         // poll for new events
         $this->window->pollEvents();
+
+        // update SDL3 audio stream
+        $this->audio?->update();
+
+        // poll SDL3 gamepad events (handled internally via update())
+        if ($this->gamepad !== null) {
+            $this->gamepad->update($this->entities);
+        }
 
         // run the update callback if available
         $this->options->update?->__invoke($this);

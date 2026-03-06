@@ -3,10 +3,9 @@
  * Office Scene Demo
  *
  * Loads the office_level1.json scene and renders all entities as colored rectangles
- * using NanoVG. This demonstrates the Phase 1 scene system (SceneLoader, ComponentRegistry,
- * SpriteRenderer, Sorting Layers, Entity Hierarchies, Camera2D).
+ * using NanoVG. Demonstrates scene system, UIInterpreter (JSON-driven HUD), and data binding.
  *
- * Run: php examples/codetycoon/office_demo.php
+ * Run: php examples/office_demo/office_demo.php
  */
 
 use GL\Math\Vec2;
@@ -29,6 +28,9 @@ use VISU\Signal\SignalQueue;
 use VISU\Signals\Input\ScrollSignal;
 use VISU\FlyUI\FlyUI;
 use VISU\FlyUI\FUILayoutFlow;
+use VISU\UI\UIInterpreter;
+use VISU\UI\UIDataContext;
+use VISU\Signals\UI\UIEventSignal;
 
 $container = require __DIR__ . '/../bootstrap.php';
 
@@ -71,15 +73,40 @@ $dragCamStart = null;
 /** @var SignalQueue<ScrollSignal>|null $scrollQueue */
 $scrollQueue = null;
 
-$quickstart = new Quickstart(function(QuickstartOptions $app) use($sceneLoader, $componentRegistry, &$scrollQueue, $sortingLayer, $spriteColors, &$camX, &$camY, &$camZoom, &$dragStartX, &$dragStartY, &$dragCamStart)
+// --- UI Interpreter for JSON-driven HUD ---
+/** @var UIInterpreter|null $uiInterpreter */
+$uiInterpreter = null;
+$gameData = new UIDataContext();
+$gameData->setAll([
+    'economy.money' => 12500,
+    'company.employees' => 9,
+    'company.morale' => 0.82,
+    'project.progress' => 0.35,
+]);
+
+$quickstart = new Quickstart(function(QuickstartOptions $app) use($sceneLoader, $componentRegistry, &$scrollQueue, $sortingLayer, $spriteColors, &$camX, &$camY, &$camZoom, &$dragStartX, &$dragStartY, &$dragCamStart, &$uiInterpreter, $gameData)
 {
     $app->windowTitle = 'Office Demo';
     $app->windowWidth = 1280;
     $app->windowHeight = 720;
 
-    $app->ready = function(QuickstartApp $app) use(&$scrollQueue) {
+    $app->ready = function(QuickstartApp $app) use(&$scrollQueue, &$uiInterpreter, $gameData) {
         // Create scroll signal queue for zoom
         $scrollQueue = $app->dispatcher->createSignalQueue(Input::EVENT_SCROLL);
+
+        // Create UI interpreter with data binding
+        $uiInterpreter = new UIInterpreter($app->dispatcher, $gameData);
+
+        // Listen for UI events from JSON buttons
+        $app->dispatcher->register('ui.event', function(UIEventSignal $signal) use ($gameData) {
+            echo "UI Event: {$signal->event}\n";
+            if ($signal->event === 'ui.hire_employee') {
+                $employees = (int) $gameData->get('company.employees', 0);
+                $gameData->set('company.employees', $employees + 1);
+                $money = (int) $gameData->get('economy.money', 0);
+                $gameData->set('economy.money', $money - 1000);
+            }
+        });
     };
 
     $app->initializeScene = function(QuickstartApp $app) use($sceneLoader) {
@@ -131,7 +158,7 @@ $quickstart = new Quickstart(function(QuickstartOptions $app) use($sceneLoader, 
         if ($app->input->isKeyPressed(GLFW_KEY_D) || $app->input->isKeyPressed(GLFW_KEY_RIGHT)) $camX += $panSpeed;
     };
 
-    $app->draw = function(QuickstartApp $app, RenderContext $context, RenderTarget $target) use(&$camX, &$camY, &$camZoom, $sortingLayer, $spriteColors)
+    $app->draw = function(QuickstartApp $app, RenderContext $context, RenderTarget $target) use(&$camX, &$camY, &$camZoom, $sortingLayer, $spriteColors, &$uiInterpreter, $gameData)
     {
         $vg = $app->vg;
         $screenW = $target->effectiveWidth();
@@ -204,15 +231,20 @@ $quickstart = new Quickstart(function(QuickstartOptions $app) use($sceneLoader, 
             $vg->stroke();
         }
 
-        // --- HUD overlay ---
+        // --- HUD overlay from JSON ---
+        if ($uiInterpreter !== null) {
+            $uiInterpreter->renderFile(__DIR__ . '/ui/hud.json');
+        }
+
+        // --- Status bar ---
         FlyUI::beginLayout(new Vec4(15))
             ->flow(FUILayoutFlow::vertical)
             ->horizontalFit()
-            ->verticalFit();
+            ->verticalFit()
+            ->alignBottomLeft();
 
-        FlyUI::text('Office Demo', VGColor::white())->fontSize(20);
-        FlyUI::text(sprintf('Entities: %d | Zoom: %.1fx', count($sprites), $camZoom), VGColor::rgb(0.7, 0.7, 0.7))->fontSize(13);
-        FlyUI::text('WASD/Arrows: Pan | Scroll: Zoom | RMB: Drag', VGColor::rgb(0.5, 0.5, 0.5))->fontSize(11);
+        FlyUI::text(sprintf('Entities: %d | Zoom: %.1fx', count($sprites), $camZoom), VGColor::rgb(0.5, 0.5, 0.5))->fontSize(11);
+        FlyUI::text('WASD/Arrows: Pan | Scroll: Zoom | RMB: Drag', VGColor::rgb(0.4, 0.4, 0.4))->fontSize(10);
 
         FlyUI::end();
 

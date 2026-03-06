@@ -247,8 +247,18 @@ class FlyUI
     }
 
     /**
+     * Creates a progress bar element
+     */
+    public static function progressBar(float $value, ?VGColor $fillColor = null): FUIProgressBar
+    {
+        $view = new FUIProgressBar($value, $fillColor);
+        self::$instance->addChildView($view);
+        return $view;
+    }
+
+    /**
      * Instance Functions/Properties
-     * 
+     *
      * ------------------------------------------------------------------------
      */
 

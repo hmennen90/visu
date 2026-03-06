@@ -31,7 +31,7 @@ class MilestoneTest extends TestCase
         $this->saver = new SceneSaver($this->componentRegistry);
         $this->prefabManager = new PrefabManager(
             $this->loader,
-            __DIR__ . '/../../examples/codetycoon'
+            __DIR__ . '/../../examples/office_demo'
         );
 
         $this->entities = new EntityRegistry();
@@ -43,7 +43,7 @@ class MilestoneTest extends TestCase
 
     public function testLoadOfficeSceneCreates50PlusEntities(): void
     {
-        $scenePath = __DIR__ . '/../../examples/codetycoon/scenes/office_level1.json';
+        $scenePath = __DIR__ . '/../../examples/office_demo/scenes/office_level1.json';
         $entityIds = $this->loader->loadFile($scenePath, $this->entities);
 
         // Milestone: 50+ entities loaded from JSON
@@ -53,7 +53,7 @@ class MilestoneTest extends TestCase
 
     public function testSceneHasEntityHierarchy(): void
     {
-        $scenePath = __DIR__ . '/../../examples/codetycoon/scenes/office_level1.json';
+        $scenePath = __DIR__ . '/../../examples/office_demo/scenes/office_level1.json';
         $this->loader->loadFile($scenePath, $this->entities);
 
         // Find the "Office" root entity
@@ -86,7 +86,7 @@ class MilestoneTest extends TestCase
 
     public function testAllEntitiesHaveSpriteRenderers(): void
     {
-        $scenePath = __DIR__ . '/../../examples/codetycoon/scenes/office_level1.json';
+        $scenePath = __DIR__ . '/../../examples/office_demo/scenes/office_level1.json';
         $this->loader->loadFile($scenePath, $this->entities);
 
         // All leaf entities (those with SpriteRenderer) should have valid sprite paths
@@ -142,7 +142,7 @@ class MilestoneTest extends TestCase
     public function testSceneRoundTrip(): void
     {
         // Load scene
-        $scenePath = __DIR__ . '/../../examples/codetycoon/scenes/office_level1.json';
+        $scenePath = __DIR__ . '/../../examples/office_demo/scenes/office_level1.json';
         $entityIds = $this->loader->loadFile($scenePath, $this->entities);
         $originalCount = count($entityIds);
 

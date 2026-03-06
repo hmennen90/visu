@@ -10,6 +10,8 @@ class AudioManager
 {
     private AudioBackendInterface $backend;
 
+    private ?Mp3Decoder $mp3Decoder = null;
+
     /**
      * Clip cache (path -> AudioClipData).
      *
@@ -98,7 +100,7 @@ class AudioManager
     }
 
     /**
-     * Load a WAV file and return AudioClipData. Results are cached.
+     * Load an audio file (WAV or MP3) and return AudioClipData. Results are cached.
      */
     public function loadClip(string $path): AudioClipData
     {
@@ -106,7 +108,17 @@ class AudioManager
             return $this->clipCache[$path];
         }
 
-        $clip = $this->backend->loadWav($path);
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+
+        if ($ext === 'mp3') {
+            if ($this->mp3Decoder === null) {
+                $this->mp3Decoder = new Mp3Decoder();
+            }
+            $clip = $this->mp3Decoder->decode($path);
+        } else {
+            $clip = $this->backend->loadWav($path);
+        }
+
         $this->clipCache[$path] = $clip;
         return $clip;
     }

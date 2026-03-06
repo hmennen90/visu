@@ -45,6 +45,11 @@ class AudioManagerTest extends TestCase
                 $this->calls['streamEnqueue'] = ($this->calls['streamEnqueue'] ?? 0) + 1;
             }
 
+            public function streamSetVolume(int $handle, float $volume): void
+            {
+                $this->calls['streamSetVolume'] = ($this->calls['streamSetVolume'] ?? 0) + 1;
+            }
+
             public function streamStop(int $handle): void
             {
                 $this->calls['streamStop'] = ($this->calls['streamStop'] ?? 0) + 1;

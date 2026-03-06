@@ -68,7 +68,9 @@ $container = $factory->create('GameContainer', function($builder)
 
     // create a new container file namespace and parse our `app.ctn` file.
     $namespace = new \ClanCats\Container\ContainerNamespace($importPaths);
-    $namespace->importDirectory(VISU_PATH_APPCONFIG, VISU_APPCONFIG_PREFIX);
+    if (is_dir(VISU_PATH_APPCONFIG)) {
+        $namespace->importDirectory(VISU_PATH_APPCONFIG, VISU_APPCONFIG_PREFIX);
+    }
     // Generate an empty container map if it doesn't exist yet.
     // This happens when VISU is used as an engine dependency and the consumer
     // project hasn't run the Composer post-autoload-dump script.

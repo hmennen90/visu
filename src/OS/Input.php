@@ -23,7 +23,7 @@ use VISU\Signals\Input\{
  * This class is responsible for handling window events, and includes a bunch of
  * helpers and utility methods to easly handle user input.
  */
-class Input implements WindowEventHandlerInterface
+class Input implements WindowEventHandlerInterface, InputInterface
 {
     /**
      * We warp the GLFW state constants to make the syntax a bit more eye pleasing.

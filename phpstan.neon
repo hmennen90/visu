@@ -22,3 +22,4 @@ parameters:
         - '/constructor expects GL\\Math\\Vec[0-4], float given\./'
         - '/.*[copy]\(\) on \(float\|int\).*/'
         - '/should return GL\\Math\\Vec[0-4] but returns float\./'
+        - '/Call to an undefined (static )?method GL\\VectorGraphics\\VGContext::/'

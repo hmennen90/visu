@@ -2,18 +2,18 @@
 
 namespace VISU\Audio;
 
-use FFI;
-use VISU\SDL3\Exception\SDLException;
+use VISU\Audio\Backend\OpenALAudioBackend;
+use VISU\Audio\Backend\SDL3AudioBackend;
 use VISU\SDL3\SDL;
 
 class AudioManager
 {
-    private AudioStream $stream;
+    private AudioBackendInterface $backend;
 
     /**
-     * Clip cache (path -> AudioClip).
+     * Clip cache (path -> AudioClipData).
      *
-     * @var array<string, AudioClip>
+     * @var array<string, AudioClipData>
      */
     private array $clipCache = [];
 
@@ -27,37 +27,24 @@ class AudioManager
     /**
      * Currently playing music clip (for looping).
      */
-    private ?AudioClip $currentMusic = null;
+    private ?AudioClipData $currentMusic = null;
 
     /**
      * Whether music is currently playing.
      */
     private bool $musicPlaying = false;
 
-    public function __construct(
-        private SDL $sdl,
-        int $sampleRate = 44100,
-        int $channels = 2,
-    ) {
-        // SDL_AUDIO_S16 = 0x8010
-        $spec = $sdl->ffi->new('SDL_AudioSpec');
-        $spec->format   = 0x8010;
-        $spec->channels = $channels;
-        $spec->freq     = $sampleRate;
+    /**
+     * Stream handle for music playback.
+     */
+    private ?int $musicStreamHandle = null;
 
-        $nativeStream = $sdl->ffi->SDL_OpenAudioDeviceStream(
-            SDL::AUDIO_DEVICE_DEFAULT_PLAYBACK,
-            FFI::addr($spec),
-            null,
-            null
-        );
-
-        if ($nativeStream === null) {
-            throw new SDLException('SDL_OpenAudioDeviceStream failed: ' . $sdl->getError());
-        }
-
-        $this->stream = new AudioStream($sdl, $nativeStream);
-        $this->stream->resume();
+    /**
+     * Create an AudioManager with explicit backend.
+     */
+    public function __construct(AudioBackendInterface $backend)
+    {
+        $this->backend = $backend;
 
         // Default volumes
         foreach (AudioChannel::cases() as $channel) {
@@ -66,30 +53,60 @@ class AudioManager
     }
 
     /**
-     * Load a WAV file and return an AudioClip. Results are cached.
+     * Auto-detect the best available audio backend.
+     * Priority: SDL3 (if SDL instance provided) -> OpenAL -> exception.
      */
-    public function loadClip(string $path): AudioClip
+    public static function create(?SDL $sdl = null): self
+    {
+        // Try SDL3 first if an SDL instance is available
+        if ($sdl !== null) {
+            try {
+                return new self(new SDL3AudioBackend($sdl));
+            } catch (\Throwable) {
+                // Fall through to OpenAL
+            }
+        }
+
+        // Try OpenAL
+        if (OpenALAudioBackend::isAvailable()) {
+            try {
+                return new self(new OpenALAudioBackend());
+            } catch (\Throwable) {
+                // Fall through to error
+            }
+        }
+
+        throw new \RuntimeException(
+            'No audio backend available. Install SDL3 (brew install sdl3) or OpenAL Soft (brew install openal-soft).'
+        );
+    }
+
+    /**
+     * Get the active backend name.
+     */
+    public function getBackendName(): string
+    {
+        return $this->backend->getName();
+    }
+
+    /**
+     * Get the active backend instance.
+     */
+    public function getBackend(): AudioBackendInterface
+    {
+        return $this->backend;
+    }
+
+    /**
+     * Load a WAV file and return AudioClipData. Results are cached.
+     */
+    public function loadClip(string $path): AudioClipData
     {
         if (isset($this->clipCache[$path])) {
             return $this->clipCache[$path];
         }
 
-        $spec      = $this->sdl->ffi->new('SDL_AudioSpec');
-        $audioBuf  = $this->sdl->ffi->new('uint8_t*');
-        $audioLen  = $this->sdl->ffi->new('uint32_t');
-
-        $ok = $this->sdl->ffi->SDL_LoadWAV(
-            $path,
-            FFI::addr($spec),
-            FFI::addr($audioBuf),
-            FFI::addr($audioLen)
-        );
-
-        if (!$ok) {
-            throw new SDLException("SDL_LoadWAV failed for '{$path}': " . $this->sdl->getError());
-        }
-
-        $clip = new AudioClip($spec, $audioBuf, (int) $audioLen->cdata, $path);
+        $clip = $this->backend->loadWav($path);
         $this->clipCache[$path] = $clip;
         return $clip;
     }
@@ -100,7 +117,8 @@ class AudioManager
     public function playSound(string $path, AudioChannel $channel = AudioChannel::SFX): void
     {
         $clip = $this->loadClip($path);
-        $this->play($clip);
+        $volume = $this->channelVolumes[$channel->value] ?? 1.0;
+        $this->backend->play($clip, $volume);
     }
 
     /**
@@ -111,7 +129,7 @@ class AudioManager
         $this->stopMusic();
         $this->currentMusic = $this->loadClip($path);
         $this->musicPlaying = true;
-        $this->stream->putData($this->currentMusic->buffer, $this->currentMusic->length);
+        $this->musicStreamHandle = $this->backend->streamStart($this->currentMusic);
     }
 
     /**
@@ -119,6 +137,10 @@ class AudioManager
      */
     public function stopMusic(): void
     {
+        if ($this->musicStreamHandle !== null) {
+            $this->backend->streamStop($this->musicStreamHandle);
+            $this->musicStreamHandle = null;
+        }
         $this->musicPlaying = false;
         $this->currentMusic = null;
     }
@@ -148,11 +170,11 @@ class AudioManager
     }
 
     /**
-     * Queue an AudioClip for playback.
+     * Play an AudioClipData directly.
      */
-    public function play(AudioClip $clip, float $volume = 1.0): void
+    public function play(AudioClipData $clip, float $volume = 1.0): void
     {
-        $this->stream->putData($clip->buffer, $clip->length);
+        $this->backend->play($clip, $volume);
     }
 
     /**
@@ -161,18 +183,12 @@ class AudioManager
      */
     public function update(): void
     {
-        // Simple music looping: re-queue when buffer is nearly empty
-        if ($this->musicPlaying && $this->currentMusic !== null) {
-            $queued = $this->stream->getQueued();
-            if ($queued < $this->currentMusic->length / 2) {
-                $this->stream->putData($this->currentMusic->buffer, $this->currentMusic->length);
+        if ($this->musicPlaying && $this->currentMusic !== null && $this->musicStreamHandle !== null) {
+            $queued = $this->backend->streamQueued($this->musicStreamHandle);
+            if ($queued < $this->currentMusic->getByteLength() / 2) {
+                $this->backend->streamEnqueue($this->musicStreamHandle, $this->currentMusic);
             }
         }
-    }
-
-    public function getStream(): AudioStream
-    {
-        return $this->stream;
     }
 
     /**
@@ -193,6 +209,9 @@ class AudioManager
 
     public function __destruct()
     {
-        $this->stream->destroy();
+        if ($this->musicStreamHandle !== null) {
+            $this->backend->streamStop($this->musicStreamHandle);
+        }
+        $this->backend->shutdown();
     }
 }

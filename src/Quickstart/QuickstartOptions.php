@@ -64,8 +64,13 @@ class QuickstartOptions
     public bool $drawAutoRenderVectorGraphics = true;
 
     /**
-     * Enable SDL3 audio subsystem via FFI.
-     * Requires SDL3 to be installed on the system.
+     * Enable audio subsystem.
+     * Auto-detects backend: SDL3 (if available) -> OpenAL -> error.
+     */
+    public bool $enableAudio = false;
+
+    /**
+     * @deprecated Use $enableAudio instead.
      */
     public bool $enableSDL3Audio = false;
 

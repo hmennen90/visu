@@ -114,7 +114,8 @@ class QuickstartApp implements GameLoopDelegate
     private ?ProfilerInterface $profiler = null;
 
     /**
-     * SDL3 Audio Manager (null when SDL3 audio is not enabled)
+     * Audio Manager (null when audio is not enabled).
+     * Backend auto-detected: SDL3 -> OpenAL.
      */
     public ?AudioManager $audio = null;
 
@@ -215,24 +216,33 @@ class QuickstartApp implements GameLoopDelegate
         $this->fullscreenTextureRenderer = new FullscreenTextureRenderer($this->gl);
         $this->dbgOverlayRenderer = new QuickstartDebugMetricsOverlay($this->container);
 
-        // initialize SDL3 subsystems if requested
-        if ($options->enableSDL3Audio || $options->enableGamepad) {
-            $sdl   = SDL::getInstance();
-            $flags = 0;
-            if ($options->enableSDL3Audio) {
-                $flags |= SDL::INIT_AUDIO;
-            }
-            if ($options->enableGamepad) {
-                $flags |= SDL::INIT_GAMEPAD | SDL::INIT_EVENTS;
-            }
-            $sdl->init($flags);
+        // Resolve combined audio flag (new enableAudio OR legacy enableSDL3Audio)
+        $wantAudio = $options->enableAudio || $options->enableSDL3Audio;
 
-            if ($options->enableSDL3Audio) {
-                $this->audio = new AudioManager($sdl);
+        // initialize SDL3 subsystems if requested
+        $sdl = null;
+        if ($wantAudio || $options->enableGamepad) {
+            try {
+                $sdl   = SDL::getInstance();
+                $flags = 0;
+                if ($wantAudio) {
+                    $flags |= SDL::INIT_AUDIO;
+                }
+                if ($options->enableGamepad) {
+                    $flags |= SDL::INIT_GAMEPAD | SDL::INIT_EVENTS;
+                }
+                $sdl->init($flags);
+            } catch (\Throwable) {
+                // SDL3 not available — $sdl stays null, audio will try OpenAL fallback
+                $sdl = null;
             }
-            if ($options->enableGamepad) {
-                $this->gamepad = new GamepadManager($sdl, $this->dispatcher);
-            }
+        }
+
+        if ($wantAudio) {
+            $this->audio = AudioManager::create($sdl);
+        }
+        if ($options->enableGamepad && $sdl !== null) {
+            $this->gamepad = new GamepadManager($sdl, $this->dispatcher);
         }
     }
 

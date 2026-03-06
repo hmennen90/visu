@@ -113,21 +113,53 @@ CDEF;
     private function findLibrary(): string
     {
         $candidates = [
-            '/usr/local/lib/libSDL3.dylib',
-            '/usr/local/Cellar/sdl3/3.4.2/lib/libSDL3.dylib',
+            // macOS – Homebrew (linked)
             '/opt/homebrew/lib/libSDL3.dylib',
+            '/usr/local/lib/libSDL3.dylib',
+            // Linux
             '/usr/lib/libSDL3.so',
             '/usr/lib/x86_64-linux-gnu/libSDL3.so',
-            'libSDL3.so',
-            'SDL3.dll',
+            '/usr/lib/aarch64-linux-gnu/libSDL3.so',
+            '/usr/local/lib/libSDL3.so',
         ];
 
-        foreach ($candidates as $path) {
-            if (file_exists($path) || str_ends_with($path, '.dll') || str_ends_with($path, '.so')) {
-                // For non-absolute paths, rely on the dynamic linker
-                if (!str_starts_with($path, '/') || file_exists($path)) {
-                    return $path;
+        // macOS – Homebrew keg-only or specific Cellar versions
+        if (PHP_OS_FAMILY === 'Darwin') {
+            foreach (['/opt/homebrew/opt/sdl3/lib', '/usr/local/opt/sdl3/lib'] as $kegDir) {
+                if (is_dir($kegDir)) {
+                    $candidates[] = $kegDir . '/libSDL3.dylib';
                 }
+            }
+            foreach (['/opt/homebrew/Cellar/sdl3', '/usr/local/Cellar/sdl3'] as $cellarDir) {
+                if (is_dir($cellarDir)) {
+                    $versions = @scandir($cellarDir, SCANDIR_SORT_DESCENDING);
+                    if ($versions) {
+                        foreach ($versions as $ver) {
+                            if ($ver[0] === '.') continue;
+                            $candidates[] = $cellarDir . '/' . $ver . '/lib/libSDL3.dylib';
+                        }
+                    }
+                }
+            }
+        }
+
+        foreach ($candidates as $path) {
+            if (file_exists($path)) {
+                return $path;
+            }
+        }
+
+        // Last resort: let the dynamic linker try
+        $fallbacks = PHP_OS_FAMILY === 'Windows'
+            ? ['SDL3.dll']
+            : ['libSDL3.so', 'libSDL3.dylib'];
+
+        foreach ($fallbacks as $name) {
+            try {
+                \FFI::cdef('int SDL_GetVersion(void);', $name);
+                return $name;
+            } catch (\FFI\Exception) {
+                continue;
             }
         }
 

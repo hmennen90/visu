@@ -130,6 +130,8 @@ class AudioManager
         $this->currentMusic = $this->loadClip($path);
         $this->musicPlaying = true;
         $this->musicStreamHandle = $this->backend->streamStart($this->currentMusic);
+        $musicVol = $this->channelVolumes[AudioChannel::Music->value] ?? 1.0;
+        $this->backend->streamSetVolume($this->musicStreamHandle, $musicVol);
     }
 
     /**
@@ -159,6 +161,11 @@ class AudioManager
     public function setChannelVolume(AudioChannel $channel, float $volume): void
     {
         $this->channelVolumes[$channel->value] = max(0.0, min(1.0, $volume));
+
+        // Apply live to music stream
+        if ($channel === AudioChannel::Music && $this->musicStreamHandle !== null) {
+            $this->backend->streamSetVolume($this->musicStreamHandle, $this->channelVolumes[$channel->value]);
+        }
     }
 
     /**

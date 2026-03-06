@@ -115,26 +115,24 @@ class FUIButton extends FUIView
         // last press key
         $lpKey = $this->buttonId . '_lp';
     
-        static $fuiButtonPressStates = [];
-        if (!isset($fuiButtonPressStates[$this->buttonId])) {
-            $fuiButtonPressStates[$this->buttonId] = self::BUTTON_PRESS_NONE;
-        }
-    
-        if ($isInside && $ctx->input->isMouseButtonPressed(MouseButton::LEFT)) 
-        {
-            // store last press time
-            $ctx->setStaticValue($lpKey, glfwGetTime());
+        // Track press state: NONE → STARTED (on press) → ENDED (on release inside) → NONE
+        $pressKey = $this->buttonId . '_ps';
+        $pressState = (int) $ctx->getStaticValue($pressKey, self::BUTTON_PRESS_NONE);
+        $mousePressed = $ctx->input->isMouseButtonPressed(MouseButton::LEFT);
+        $mouseReleased = $ctx->input->isMouseButtonReleased(MouseButton::LEFT);
 
-            if ($fuiButtonPressStates[$this->buttonId] === self::BUTTON_PRESS_NONE) {
-                $fuiButtonPressStates[$this->buttonId] = self::BUTTON_PRESS_STARTED;
-            }
-        } else if ($isInside && $fuiButtonPressStates[$this->buttonId] === self::BUTTON_PRESS_STARTED) {
-            $fuiButtonPressStates[$this->buttonId] = self::BUTTON_PRESS_ENDED;
+        if ($isInside && $mousePressed && $pressState === self::BUTTON_PRESS_NONE)
+        {
+            $ctx->setStaticValue($lpKey, glfwGetTime());
+            $ctx->setStaticValue($pressKey, self::BUTTON_PRESS_STARTED);
+        } else if ($isInside && $mouseReleased && $pressState === self::BUTTON_PRESS_STARTED) {
+            $ctx->setStaticValue($pressKey, self::BUTTON_PRESS_NONE);
             if ($this->onClick) {
                 ($this->onClick)();
             }
-        } else {
-            $fuiButtonPressStates[$this->buttonId] = self::BUTTON_PRESS_NONE;
+        } else if ($mouseReleased || (!$isInside && $pressState === self::BUTTON_PRESS_STARTED && $mousePressed)) {
+            // Released outside or dragged away — cancel
+            $ctx->setStaticValue($pressKey, self::BUTTON_PRESS_NONE);
         }
 
         // we have a little fade animation of the ring of the button

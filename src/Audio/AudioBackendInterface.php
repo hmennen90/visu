@@ -31,6 +31,11 @@ interface AudioBackendInterface
     public function streamEnqueue(int $handle, AudioClipData $clip): void;
 
     /**
+     * Set the volume of an active stream (0.0 to 1.0).
+     */
+    public function streamSetVolume(int $handle, float $volume): void;
+
+    /**
      * Stop and destroy a stream handle.
      */
     public function streamStop(int $handle): void;

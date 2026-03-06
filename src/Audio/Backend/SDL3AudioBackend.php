@@ -143,6 +143,11 @@ class SDL3AudioBackend implements AudioBackendInterface
         $this->sdl->ffi->SDL_PutAudioStreamData($this->streams[$handle], $buf, $len);
     }
 
+    public function streamSetVolume(int $handle, float $volume): void
+    {
+        // SDL3 stream API does not support per-stream volume natively
+    }
+
     public function streamStop(int $handle): void
     {
         if (!isset($this->streams[$handle])) {

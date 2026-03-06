@@ -130,29 +130,68 @@ CDEF;
     private static function findLibrary(): string
     {
         $candidates = [
-            // macOS
+            // macOS – system framework
             '/System/Library/Frameworks/OpenAL.framework/OpenAL',
+            // macOS – Homebrew (linked)
             '/opt/homebrew/lib/libopenal.dylib',
             '/usr/local/lib/libopenal.dylib',
             // Linux
             '/usr/lib/x86_64-linux-gnu/libopenal.so.1',
             '/usr/lib/x86_64-linux-gnu/libopenal.so',
+            '/usr/lib/aarch64-linux-gnu/libopenal.so.1',
+            '/usr/lib/aarch64-linux-gnu/libopenal.so',
             '/usr/lib/libopenal.so.1',
             '/usr/lib/libopenal.so',
-            'libopenal.so.1',
-            'libopenal.so',
-            // Windows
-            'OpenAL32.dll',
-            'soft_oal.dll',
         ];
 
-        foreach ($candidates as $path) {
-            if (!str_starts_with($path, '/')) {
-                // Rely on dynamic linker for relative paths
-                return $path;
+        // macOS – Homebrew keg-only (openal-soft is not symlinked by default)
+        if (PHP_OS_FAMILY === 'Darwin') {
+            foreach (['/opt/homebrew/opt/openal-soft/lib', '/usr/local/opt/openal-soft/lib'] as $kegDir) {
+                if (is_dir($kegDir)) {
+                    $candidates[] = $kegDir . '/libopenal.dylib';
+                }
             }
+            // Scan Homebrew Cellar for any installed version
+            foreach (['/opt/homebrew/Cellar/openal-soft', '/usr/local/Cellar/openal-soft'] as $cellarDir) {
+                if (is_dir($cellarDir)) {
+                    $versions = @scandir($cellarDir, SCANDIR_SORT_DESCENDING);
+                    if ($versions) {
+                        foreach ($versions as $ver) {
+                            if ($ver[0] === '.') continue;
+                            $candidates[] = $cellarDir . '/' . $ver . '/lib/libopenal.dylib';
+                        }
+                    }
+                }
+            }
+        }
+
+        // Linux – scan common lib directories for any libopenal variant
+        if (PHP_OS_FAMILY === 'Linux') {
+            foreach (['/usr/lib', '/usr/local/lib'] as $libDir) {
+                $matches = @glob($libDir . '/*/libopenal.so*');
+                if ($matches) {
+                    array_push($candidates, ...$matches);
+                }
+            }
+        }
+
+        foreach ($candidates as $path) {
             if (file_exists($path)) {
                 return $path;
+            }
+        }
+
+        // Last resort: let the dynamic linker try
+        $fallbacks = PHP_OS_FAMILY === 'Windows'
+            ? ['OpenAL32.dll', 'soft_oal.dll']
+            : ['libopenal.so.1', 'libopenal.so', 'libopenal.dylib'];
+
+        foreach ($fallbacks as $name) {
+            try {
+                \FFI::cdef('void alGetError(void);', $name);
+                return $name;
+            } catch (\FFI\Exception) {
+                continue;
             }
         }
 
@@ -272,8 +311,9 @@ CDEF;
 
         $format = $this->getALFormat($clip);
         $len = $clip->getByteLength();
+        $pcmData = $clip->pcmData;
         $pcmBuf = FFI::new("uint8_t[$len]");
-        FFI::memcpy($pcmBuf, $clip->pcmData, $len);
+        FFI::memcpy($pcmBuf, $pcmData, $len);
 
         $this->al->alBufferData($bufIdVal, $format, $pcmBuf, $len, $clip->sampleRate);
 
@@ -413,6 +453,12 @@ CDEF;
         if ($state->cdata !== self::AL_PLAYING) {
             $this->al->alSourcePlay($sourceId);
         }
+    }
+
+    public function streamSetVolume(int $handle, float $volume): void
+    {
+        if (!isset($this->streams[$handle])) return;
+        $this->al->alSourcef($this->streams[$handle]['source'], self::AL_GAIN, $volume);
     }
 
     public function streamStop(int $handle): void

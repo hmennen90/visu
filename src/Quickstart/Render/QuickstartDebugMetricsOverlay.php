@@ -44,7 +44,7 @@ class QuickstartDebugMetricsOverlay
     /**
      * Should the debug overlay be rendered?
      */
-    public bool $enabled = true;
+    public bool $enabled = false;
 
     private DebugOverlayTextRenderer $overlayTextRenderer;
 

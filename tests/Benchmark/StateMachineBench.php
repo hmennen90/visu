@@ -1,6 +1,6 @@
 <?php
 
-namespace Tests\Benchmark;
+namespace VISU\Tests\Benchmark;
 
 use VISU\AI\BTContext;
 use VISU\AI\StateInterface;

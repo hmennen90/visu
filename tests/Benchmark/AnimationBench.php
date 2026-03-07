@@ -1,6 +1,6 @@
 <?php
 
-namespace Tests\Benchmark;
+namespace VISU\Tests\Benchmark;
 
 use GL\Math\Quat;
 use GL\Math\Vec3;

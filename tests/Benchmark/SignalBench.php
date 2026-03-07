@@ -1,6 +1,6 @@
 <?php
 
-namespace Tests\Benchmark;
+namespace VISU\Tests\Benchmark;
 
 use VISU\Signal\Dispatcher;
 use VISU\Signal\Signal;

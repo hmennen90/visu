@@ -255,7 +255,7 @@ $quickstart = new Quickstart(function (QuickstartOptions $app) use (&$state, $co
             $markerRenderer->materialOverride = $markerMat;
             $app->entities->attach($marker, $markerRenderer);
             $markerTransform = $app->entities->attach($marker, new Transform());
-            $markerTransform->setParent($transform);
+            $markerTransform->setParent($app->entities, $light);
         }
     };
 

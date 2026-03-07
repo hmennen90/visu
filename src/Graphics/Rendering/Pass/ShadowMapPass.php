@@ -169,15 +169,13 @@ class ShadowMapPass extends RenderPass
         }
 
         // frustum center
-        $center = new Vec3(0, 0, 0);
+        $cx = 0.0; $cy = 0.0; $cz = 0.0;
         foreach ($corners as $c) {
-            $center->x += $c->x;
-            $center->y += $c->y;
-            $center->z += $c->z;
+            $cx += $c->x;
+            $cy += $c->y;
+            $cz += $c->z;
         }
-        $center->x /= 8;
-        $center->y /= 8;
-        $center->z /= 8;
+        $center = new Vec3($cx / 8.0, $cy / 8.0, $cz / 8.0);
 
         // light view matrix
         $eye = new Vec3(

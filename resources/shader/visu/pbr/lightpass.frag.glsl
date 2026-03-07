@@ -7,7 +7,7 @@
 #define MAX_SHADOW_CASCADES 4
 #define MAX_SHADOW_POINT_LIGHTS 4
 
-in vec2 v_texture_cords;
+in vec2 v_uv;
 out vec4 fragment_color;
 
 // GBuffer textures
@@ -230,12 +230,12 @@ vec3 tone_mapping_ACESFilm(vec3 x)
 
 void main()
 {
-    vec3 pos = texture(gbuffer_position, v_texture_cords).rgb;
-    vec3 normal = texture(gbuffer_normal, v_texture_cords).rgb;
-    vec3 albedo = texture(gbuffer_albedo, v_texture_cords).rgb;
-    float ao = texture(gbuffer_ao, v_texture_cords).r;
-    vec2 mr = texture(gbuffer_metallic_roughness, v_texture_cords).rg;
-    vec3 emissive = texture(gbuffer_emissive, v_texture_cords).rgb;
+    vec3 pos = texture(gbuffer_position, v_uv).rgb;
+    vec3 normal = texture(gbuffer_normal, v_uv).rgb;
+    vec3 albedo = texture(gbuffer_albedo, v_uv).rgb;
+    float ao = texture(gbuffer_ao, v_uv).r;
+    vec2 mr = texture(gbuffer_metallic_roughness, v_uv).rg;
+    vec3 emissive = texture(gbuffer_emissive, v_uv).rgb;
 
     float metallic = mr.r;
     float roughness = mr.g;

@@ -5,6 +5,7 @@
 #define MAX_POINT_LIGHTS 32
 #define MAX_SPOT_LIGHTS 16
 #define MAX_SHADOW_CASCADES 4
+#define MAX_SHADOW_POINT_LIGHTS 4
 
 in vec2 v_texture_cords;
 out vec4 fragment_color;
@@ -65,6 +66,17 @@ struct SpotLight {
 };
 uniform SpotLight spot_lights[MAX_SPOT_LIGHTS];
 uniform int num_spot_lights;
+
+// point light cubemap shadows
+uniform samplerCube point_shadow_map_0;
+uniform samplerCube point_shadow_map_1;
+uniform samplerCube point_shadow_map_2;
+uniform samplerCube point_shadow_map_3;
+uniform int num_point_shadow_lights;
+uniform vec3 point_shadow_positions[MAX_SHADOW_POINT_LIGHTS];
+uniform float point_shadow_far_planes[MAX_SHADOW_POINT_LIGHTS];
+// maps shadow light index to point_lights[] index (-1 = no shadow)
+uniform int point_shadow_light_indices[MAX_SHADOW_POINT_LIGHTS];
 
 const float gamma = 2.2;
 const float PI = 3.14159265359;
@@ -176,6 +188,35 @@ float computeShadow(vec3 worldPos, vec3 N, vec3 L)
     return shadow;
 }
 
+float samplePointShadow(samplerCube shadowMap, vec3 fragToLight, float farPlane)
+{
+    float closestDepth = texture(shadowMap, fragToLight).r;
+    closestDepth *= farPlane;
+    float currentDepth = length(fragToLight);
+
+    // bias based on distance to prevent shadow acne
+    float bias = max(0.05 * (1.0 - currentDepth / farPlane), 0.005);
+
+    return currentDepth - bias > closestDepth ? 0.0 : 1.0;
+}
+
+float computePointShadow(int pointLightIndex, vec3 fragPos)
+{
+    // check each shadow-casting light to see if it matches this point light index
+    for (int s = 0; s < num_point_shadow_lights; s++) {
+        if (point_shadow_light_indices[s] != pointLightIndex) continue;
+
+        vec3 fragToLight = fragPos - point_shadow_positions[s];
+        float farPlane = point_shadow_far_planes[s];
+
+        if (s == 0) return samplePointShadow(point_shadow_map_0, fragToLight, farPlane);
+        else if (s == 1) return samplePointShadow(point_shadow_map_1, fragToLight, farPlane);
+        else if (s == 2) return samplePointShadow(point_shadow_map_2, fragToLight, farPlane);
+        else return samplePointShadow(point_shadow_map_3, fragToLight, farPlane);
+    }
+    return 1.0; // no shadow map for this light
+}
+
 vec3 tone_mapping_ACESFilm(vec3 x)
 {
     x *= exposure;
@@ -209,7 +250,7 @@ void main()
     // directional light (with shadow)
     vec3 Lo = calculate_light(L_sun, sun_color * sun_intensity, N, V, albedo, metallic, roughness) * shadow;
 
-    // point lights (no shadows yet)
+    // point lights (with cubemap shadows)
     for (int i = 0; i < num_point_lights; i++) {
         vec3 light_vec = point_lights[i].position - pos;
         float distance = length(light_vec);
@@ -225,8 +266,10 @@ void main()
         float smooth_falloff = 1.0 - smoothstep(point_lights[i].range * 0.75, point_lights[i].range, distance);
         attenuation *= smooth_falloff;
 
+        float point_shadow = computePointShadow(i, pos);
+
         vec3 radiance = point_lights[i].color * point_lights[i].intensity * attenuation;
-        Lo += calculate_light(L, radiance, N, V, albedo, metallic, roughness);
+        Lo += calculate_light(L, radiance, N, V, albedo, metallic, roughness) * point_shadow;
     }
 
     // spot lights

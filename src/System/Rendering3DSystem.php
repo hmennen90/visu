@@ -20,6 +20,7 @@ use VISU\Graphics\Rendering\Pass\PBRDeferredLightPass;
 use VISU\Graphics\Rendering\Pass\PBRGBufferData;
 use VISU\Graphics\Rendering\Pass\PBRGBufferPass;
 use VISU\Graphics\Rendering\Pass\GBufferPassData;
+use VISU\Graphics\Rendering\Pass\PointLightShadowPass;
 use VISU\Graphics\Rendering\Pass\ShadowMapPass;
 use VISU\Graphics\Rendering\Pass\SSAOData;
 use VISU\Graphics\Rendering\PipelineContainer;
@@ -62,6 +63,16 @@ class Rendering3DSystem implements SystemInterface
      */
     public int $shadowCascadeCount = 4;
 
+    /**
+     * Enable/disable point light cubemap shadows
+     */
+    public bool $pointShadowsEnabled = true;
+
+    /**
+     * Point light shadow cubemap resolution per face (pixels)
+     */
+    public int $pointShadowResolution = 512;
+
     private ?RenderTargetResource $currentRenderTargetRes = null;
 
     private FullscreenTextureRenderer $fullscreenRenderer;
@@ -71,6 +82,7 @@ class Rendering3DSystem implements SystemInterface
     private ShaderProgram $geometryShader;
     private ShaderProgram $lightingShader;
     private ShaderProgram $shadowDepthShader;
+    private ShaderProgram $pointShadowDepthShader;
 
     public function __construct(
         private GLState $gl,
@@ -84,6 +96,7 @@ class Rendering3DSystem implements SystemInterface
         $this->geometryShader = $this->shaders->get('visu/pbr/geometry');
         $this->lightingShader = $this->shaders->get('visu/pbr/lightpass');
         $this->shadowDepthShader = $this->shaders->get('visu/pbr/shadow_depth');
+        $this->pointShadowDepthShader = $this->shaders->get('visu/pbr/point_shadow_depth');
     }
 
     public function register(EntitiesInterface $entities): void
@@ -194,6 +207,16 @@ class Rendering3DSystem implements SystemInterface
                 $this->modelCollection,
                 cascadeCount: $this->shadowCascadeCount,
                 resolution: $this->shadowResolution,
+            ));
+        }
+
+        // Point light cubemap shadow pass
+        if ($this->pointShadowsEnabled) {
+            $context->pipeline->addPass(new PointLightShadowPass(
+                $this->pointShadowDepthShader,
+                $entities,
+                $this->modelCollection,
+                resolution: $this->pointShadowResolution,
             ));
         }
 

@@ -77,8 +77,10 @@ class PBRDeferredLightPass extends RenderPass
         // view matrix for cascade depth calculation
         $this->lightingShader->setUniformMatrix4f('u_view_matrix', false, $cameraData->view);
 
-        // point lights
+        // point lights — also track which are shadow-casting for cubemap binding
         $lightIndex = 0;
+        /** @var array<int, int> Maps shadow light index => point_lights[] array index */
+        $shadowLightMapping = [];
         foreach ($this->entities->view(PointLightComponent::class) as $entity => $light) {
             if ($lightIndex >= self::MAX_POINT_LIGHTS) break;
 
@@ -93,6 +95,11 @@ class PBRDeferredLightPass extends RenderPass
             $this->lightingShader->setUniform1f("{$prefix}.constant", $light->constantAttenuation);
             $this->lightingShader->setUniform1f("{$prefix}.linear", $light->linearAttenuation);
             $this->lightingShader->setUniform1f("{$prefix}.quadratic", $light->quadraticAttenuation);
+
+            if ($light->castsShadows && count($shadowLightMapping) < PointLightShadowPass::MAX_SHADOW_POINT_LIGHTS) {
+                $shadowLightMapping[count($shadowLightMapping)] = $lightIndex;
+            }
+
             $lightIndex++;
         }
         $this->lightingShader->setUniform1i('num_point_lights', $lightIndex);
@@ -165,6 +172,29 @@ class PBRDeferredLightPass extends RenderPass
             }
         } else {
             $this->lightingShader->setUniform1i('num_shadow_cascades', 0);
+        }
+
+        // bind point light cubemap shadows
+        $hasPointShadows = $data->has(PointLightShadowData::class);
+        if ($hasPointShadows) {
+            $pointShadowData = $data->get(PointLightShadowData::class);
+        }
+        if ($hasPointShadows && $pointShadowData->shadowLightCount > 0) {
+            $this->lightingShader->setUniform1i('num_point_shadow_lights', $pointShadowData->shadowLightCount);
+
+            for ($i = 0; $i < $pointShadowData->shadowLightCount; $i++) {
+                // bind cubemap texture
+                glActiveTexture(GL_TEXTURE0 + $texUnit);
+                glBindTexture(GL_TEXTURE_CUBE_MAP, $pointShadowData->cubemapTextureIds[$i]);
+                $this->lightingShader->setUniform1i("point_shadow_map_{$i}", $texUnit);
+                $texUnit++;
+
+                $this->lightingShader->setUniformVec3("point_shadow_positions[{$i}]", $pointShadowData->lightPositions[$i]);
+                $this->lightingShader->setUniform1f("point_shadow_far_planes[{$i}]", $pointShadowData->farPlanes[$i]);
+                $this->lightingShader->setUniform1i("point_shadow_light_indices[{$i}]", $shadowLightMapping[$i] ?? -1);
+            }
+        } else {
+            $this->lightingShader->setUniform1i('num_point_shadow_lights', 0);
         }
 
         glDisable(GL_DEPTH_TEST);

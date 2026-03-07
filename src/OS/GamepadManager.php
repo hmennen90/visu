@@ -93,6 +93,9 @@ class GamepadManager implements SystemInterface
     // Internal helpers
     // -----------------------------------------------------------------------
 
+    /**
+     * @param array<string, mixed> $event
+     */
     private function handleEvent(array $event): void
     {
         switch ($event['type']) {

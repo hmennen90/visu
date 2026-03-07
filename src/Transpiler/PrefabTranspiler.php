@@ -9,7 +9,7 @@ class PrefabTranspiler
     private SceneTranspiler $sceneTranspiler;
 
     public function __construct(
-        private ComponentRegistry $componentRegistry,
+        ComponentRegistry $componentRegistry,
     ) {
         $this->sceneTranspiler = new SceneTranspiler($componentRegistry);
     }

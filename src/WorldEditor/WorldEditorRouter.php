@@ -28,6 +28,9 @@ $method = $_SERVER['REQUEST_METHOD'];
 
 // Strip query string for routing
 $path = parse_url($uri, PHP_URL_PATH);
+if (!is_string($path)) {
+    $path = '/';
+}
 
 if (strpos($path, '/api/') === 0) {
     require_once __DIR__ . '/Api/WorldsController.php';

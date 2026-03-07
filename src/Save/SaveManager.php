@@ -31,7 +31,7 @@ class SaveManager
     private string $autosaveSlot = 'autosave';
 
     /**
-     * @var array<string, callable(int, array<string, mixed>): array<string, mixed>> Migration callbacks keyed by "from_version".
+     * @var array<int, callable(int, array<string, mixed>): array<string, mixed>> Migration callbacks keyed by from-version number.
      */
     private array $migrations = [];
 

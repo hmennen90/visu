@@ -30,6 +30,7 @@ class OpenALAudioBackend implements AudioBackendInterface
     private const AL_LOOPING = 0x1007;
     private const AL_BUFFER  = 0x1009;
 
+    /** @phpstan-ignore-next-line */
     private const AL_TRUE  = 1;
     private const AL_FALSE = 0;
 
@@ -266,10 +267,14 @@ CDEF;
 
         while ($offset < strlen($data) - 8) {
             $chunkId = substr($data, $offset, 4);
-            $chunkSize = unpack('V', substr($data, $offset + 4, 4))[1];
+            $unpacked = unpack('V', substr($data, $offset + 4, 4));
+            $chunkSize = $unpacked !== false ? $unpacked[1] : 0;
 
             if ($chunkId === 'fmt ') {
                 $fmt = unpack('vAudioFormat/vChannels/VSampleRate/VByteRate/vBlockAlign/vBitsPerSample', substr($data, $offset + 8, 16));
+                if ($fmt === false) {
+                    throw new \RuntimeException('Failed to parse WAV fmt chunk');
+                }
                 $channels = $fmt['Channels'];
                 $sampleRate = $fmt['SampleRate'];
                 $bitsPerSample = $fmt['BitsPerSample'];
@@ -393,7 +398,7 @@ CDEF;
         $processed = $this->al->new('ALint');
         $this->al->alGetSourcei($sourceId, self::AL_BUFFERS_PROCESSED, FFI::addr($processed));
 
-        $remaining = $queued->cdata - $processed->cdata;
+        $remaining = (int)$queued->cdata - (int)$processed->cdata;
         return $remaining * $this->streams[$handle]['chunkSize'];
     }
 

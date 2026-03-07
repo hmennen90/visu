@@ -60,7 +60,7 @@ class WorldsController
                 $name = basename($file, '.world.json');
                 $worlds[] = [
                     'name'     => $name,
-                    'modified' => date('c', filemtime($file)),
+                    'modified' => date('c', filemtime($file) ?: 0),
                     'size'     => filesize($file),
                 ];
             }

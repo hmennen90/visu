@@ -84,7 +84,7 @@ class SnapshotComparator
             throw new \RuntimeException('Failed to create diff image.');
         }
 
-        $bgColor = imagecolorallocate($diff, 30, 30, 30);
+        $bgColor = imagecolorallocate($diff, 30, 30, 30) ?: 0;
         imagefill($diff, 0, 0, $bgColor);
 
         // Copy reference (left)
@@ -112,7 +112,7 @@ class SnapshotComparator
                     $color = imagecolorallocate($diff, $intensity, (int)($intensity * 0.15), (int)($intensity * 0.1));
                 }
 
-                imagesetpixel($diff, $diffOffsetX + $x, $y, $color);
+                imagesetpixel($diff, $diffOffsetX + $x, $y, $color ?: 0);
             }
         }
 
@@ -124,6 +124,6 @@ class SnapshotComparator
         $png = ob_get_clean();
         imagedestroy($diff);
 
-        return $png;
+        return $png ?: '';
     }
 }

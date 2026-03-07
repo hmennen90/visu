@@ -112,7 +112,7 @@ abstract class VisualTestCase extends \PHPUnit\Framework\TestCase
                 $r = $buffer[$srcIdx];
                 $g = $buffer[$srcIdx + 1];
                 $b = $buffer[$srcIdx + 2];
-                $color = imagecolorallocate($img, $r, $g, $b);
+                $color = imagecolorallocate($img, $r, $g, $b) ?: 0;
                 imagesetpixel($img, $x, $y, $color);
             }
         }
@@ -122,7 +122,7 @@ abstract class VisualTestCase extends \PHPUnit\Framework\TestCase
         $png = ob_get_clean();
         imagedestroy($img);
 
-        return $png;
+        return $png ?: '';
     }
 
     /**
@@ -176,6 +176,9 @@ abstract class VisualTestCase extends \PHPUnit\Framework\TestCase
         }
 
         $referencePng = file_get_contents($referencePath);
+        if ($referencePng === false) {
+            $this->fail("Failed to read reference snapshot: {$referencePath}");
+        }
         $diffPercent = SnapshotComparator::compare($actualPng, $referencePng);
         $passed = $diffPercent <= $threshold;
 
@@ -222,6 +225,10 @@ abstract class VisualTestCase extends \PHPUnit\Framework\TestCase
         }
 
         $reflection = new \ReflectionClass($this);
-        return dirname($reflection->getFileName());
+        $fileName = $reflection->getFileName();
+        if ($fileName === false) {
+            throw new \RuntimeException('Cannot resolve snapshot directory for internal class.');
+        }
+        return dirname($fileName);
     }
 }

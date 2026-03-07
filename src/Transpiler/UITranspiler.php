@@ -270,7 +270,7 @@ class UITranspiler
 
         // Mixed text with bindings: "Money: {economy.money}"
         if (preg_match_all('/\{([^}]+)\}/', $text, $matches)) {
-            $parts = preg_split('/\{[^}]+\}/', $text);
+            $parts = preg_split('/\{[^}]+\}/', $text) ?: [];
             $result = '';
             foreach ($parts as $i => $part) {
                 if ($part !== '') {

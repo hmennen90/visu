@@ -5,6 +5,7 @@ namespace VISU\System;
 use VISU\Component\DirectionalLightComponent;
 use VISU\Component\MeshRendererComponent;
 use VISU\Component\PointLightComponent;
+use VISU\Component\SpotLightComponent;
 use VISU\ECS\EntitiesInterface;
 use VISU\ECS\SystemInterface;
 use VISU\Geo\Transform;
@@ -89,6 +90,7 @@ class Rendering3DSystem implements SystemInterface
     {
         $entities->registerComponent(MeshRendererComponent::class);
         $entities->registerComponent(PointLightComponent::class);
+        $entities->registerComponent(SpotLightComponent::class);
         $entities->registerComponent(Transform::class);
 
         $entities->setSingleton(new DirectionalLightComponent);

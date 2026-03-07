@@ -3,6 +3,7 @@
 #define PBR_DISTRIBUTION_GGX
 #define PBR_GEOMETRY_COOK_TORRANCE
 #define MAX_POINT_LIGHTS 32
+#define MAX_SPOT_LIGHTS 16
 #define MAX_SHADOW_CASCADES 4
 
 in vec2 v_texture_cords;
@@ -48,6 +49,22 @@ struct PointLight {
 };
 uniform PointLight point_lights[MAX_POINT_LIGHTS];
 uniform int num_point_lights;
+
+// spot lights
+struct SpotLight {
+    vec3 position;
+    vec3 direction;
+    vec3 color;
+    float intensity;
+    float range;
+    float constant;
+    float linear;
+    float quadratic;
+    float innerCutoff; // cos(innerAngle)
+    float outerCutoff; // cos(outerAngle)
+};
+uniform SpotLight spot_lights[MAX_SPOT_LIGHTS];
+uniform int num_spot_lights;
 
 const float gamma = 2.2;
 const float PI = 3.14159265359;
@@ -209,6 +226,34 @@ void main()
         attenuation *= smooth_falloff;
 
         vec3 radiance = point_lights[i].color * point_lights[i].intensity * attenuation;
+        Lo += calculate_light(L, radiance, N, V, albedo, metallic, roughness);
+    }
+
+    // spot lights
+    for (int i = 0; i < num_spot_lights; i++) {
+        vec3 light_vec = spot_lights[i].position - pos;
+        float distance = length(light_vec);
+
+        if (distance > spot_lights[i].range) continue;
+
+        vec3 L = light_vec / distance;
+
+        // cone attenuation
+        float theta = dot(L, normalize(-spot_lights[i].direction));
+        float epsilon = spot_lights[i].innerCutoff - spot_lights[i].outerCutoff;
+        float spot_intensity = clamp((theta - spot_lights[i].outerCutoff) / epsilon, 0.0, 1.0);
+
+        if (spot_intensity <= 0.0) continue;
+
+        float attenuation = 1.0 / (
+            spot_lights[i].constant +
+            spot_lights[i].linear * distance +
+            spot_lights[i].quadratic * distance * distance
+        );
+        float smooth_falloff = 1.0 - smoothstep(spot_lights[i].range * 0.75, spot_lights[i].range, distance);
+        attenuation *= smooth_falloff * spot_intensity;
+
+        vec3 radiance = spot_lights[i].color * spot_lights[i].intensity * attenuation;
         Lo += calculate_light(L, radiance, N, V, albedo, metallic, roughness);
     }
 

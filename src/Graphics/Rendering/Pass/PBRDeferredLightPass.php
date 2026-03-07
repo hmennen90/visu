@@ -2,8 +2,10 @@
 
 namespace VISU\Graphics\Rendering\Pass;
 
+use GL\Math\{GLM, Quat, Vec3};
 use VISU\Component\DirectionalLightComponent;
 use VISU\Component\PointLightComponent;
+use VISU\Component\SpotLightComponent;
 use VISU\ECS\EntitiesInterface;
 use VISU\Geo\Transform;
 use VISU\Graphics\GLState;
@@ -17,6 +19,7 @@ use VISU\Graphics\ShaderProgram;
 class PBRDeferredLightPass extends RenderPass
 {
     const MAX_POINT_LIGHTS = 32;
+    const MAX_SPOT_LIGHTS = 16;
 
     public function __construct(
         private ShaderProgram $lightingShader,
@@ -93,6 +96,36 @@ class PBRDeferredLightPass extends RenderPass
             $lightIndex++;
         }
         $this->lightingShader->setUniform1i('num_point_lights', $lightIndex);
+
+        // spot lights
+        $spotIndex = 0;
+        foreach ($this->entities->view(SpotLightComponent::class) as $entity => $spot) {
+            if ($spotIndex >= self::MAX_SPOT_LIGHTS) break;
+
+            $transform = $this->entities->get($entity, Transform::class);
+            $worldPos = $transform->getWorldPosition($this->entities);
+
+            // transform local direction by entity orientation
+            $worldDir = Quat::multiplyVec3(
+                $transform->getWorldOrientation($this->entities),
+                $spot->direction,
+            );
+
+            $prefix = "spot_lights[{$spotIndex}]";
+
+            $this->lightingShader->setUniformVec3("{$prefix}.position", $worldPos);
+            $this->lightingShader->setUniformVec3("{$prefix}.direction", $worldDir);
+            $this->lightingShader->setUniformVec3("{$prefix}.color", $spot->color);
+            $this->lightingShader->setUniform1f("{$prefix}.intensity", $spot->intensity);
+            $this->lightingShader->setUniform1f("{$prefix}.range", $spot->range);
+            $this->lightingShader->setUniform1f("{$prefix}.constant", $spot->constantAttenuation);
+            $this->lightingShader->setUniform1f("{$prefix}.linear", $spot->linearAttenuation);
+            $this->lightingShader->setUniform1f("{$prefix}.quadratic", $spot->quadraticAttenuation);
+            $this->lightingShader->setUniform1f("{$prefix}.innerCutoff", cos(GLM::radians($spot->innerAngle)));
+            $this->lightingShader->setUniform1f("{$prefix}.outerCutoff", cos(GLM::radians($spot->outerAngle)));
+            $spotIndex++;
+        }
+        $this->lightingShader->setUniform1i('num_spot_lights', $spotIndex);
 
         // bind GBuffer textures
         $texUnit = 0;

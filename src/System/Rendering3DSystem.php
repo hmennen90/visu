@@ -26,6 +26,7 @@ use VISU\Graphics\Rendering\Pass\SSAOData;
 use VISU\Graphics\Rendering\PipelineContainer;
 use VISU\Graphics\Rendering\PipelineResources;
 use VISU\Graphics\Rendering\RenderContext;
+use VISU\Graphics\Rendering\PostProcessStack;
 use VISU\Graphics\Rendering\Renderer\FullscreenDebugDepthRenderer;
 use VISU\Graphics\Rendering\Renderer\FullscreenTextureRenderer;
 use VISU\Graphics\Rendering\Renderer\SSAORenderer;
@@ -72,6 +73,11 @@ class Rendering3DSystem implements SystemInterface
      * Point light shadow cubemap resolution per face (pixels)
      */
     public int $pointShadowResolution = 512;
+
+    /**
+     * Post-processing stack (Bloom, DoF, Motion Blur)
+     */
+    public ?PostProcessStack $postProcessStack = null;
 
     private ?RenderTargetResource $currentRenderTargetRes = null;
 
@@ -236,9 +242,20 @@ class Rendering3DSystem implements SystemInterface
             $entities,
         ));
 
-        // copy to final render target
+        // post-processing chain
         $lightpass = $context->data->get(DeferredLightPassData::class);
-        $this->fullscreenRenderer->attachPass($context->pipeline, $renderTarget, $lightpass->output);
+        $finalOutput = $lightpass->output;
+
+        if ($this->postProcessStack !== null && $this->postProcessStack->hasActiveEffects()) {
+            $finalOutput = $this->postProcessStack->attachPasses(
+                $context->pipeline,
+                $context->data,
+                $finalOutput,
+            );
+        }
+
+        // copy to final render target
+        $this->fullscreenRenderer->attachPass($context->pipeline, $renderTarget, $finalOutput);
     }
 
     /**

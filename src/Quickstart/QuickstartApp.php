@@ -335,6 +335,8 @@ class QuickstartApp implements GameLoopDelegate
         // create a color attachment
         $sceneColorOptions = new TextureOptions;
         $sceneColorOptions->internalFormat = GL_RGBA;
+        $sceneColorOptions->wrapS = GL_CLAMP_TO_EDGE;
+        $sceneColorOptions->wrapT = GL_CLAMP_TO_EDGE;
         $sceneColorAtt = $context->pipeline->createColorAttachment($quickstartPassData->renderTarget, 'quickstartColor', $sceneColorOptions);
 
         // we plan to render the scene color buffer to the backbuffer

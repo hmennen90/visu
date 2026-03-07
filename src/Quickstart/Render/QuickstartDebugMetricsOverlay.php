@@ -61,9 +61,12 @@ class QuickstartDebugMetricsOverlay
             DebugOverlayTextRenderer::loadDebugFontAtlas(),
         );
 
-        // listen to keyboard events to toggle debug overlay
-        $container->getTyped(Dispatcher::class, 'dispatcher')->register('input.key', function(KeySignal $keySignal) {
-            if ($keySignal->key == Key::F1 && $keySignal->action == Input::PRESS) {
+        // listen to keyboard events to toggle debug overlay (cross-check with
+        // polling to filter phantom key events from macOS fullscreen transitions)
+        $input = $container->getTyped(Input::class, 'input');
+        $container->getTyped(Dispatcher::class, 'dispatcher')->register('input.key', function(KeySignal $keySignal) use ($input) {
+            if ($keySignal->key == Key::F1 && $keySignal->action == Input::PRESS
+                && $input->getKeyState(Key::F1) === GLFW_PRESS) {
                 $this->enabled = !$this->enabled;
             }
         });

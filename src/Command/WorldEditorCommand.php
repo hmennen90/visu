@@ -20,12 +20,25 @@ class WorldEditorCommand extends Command
             'defaultValue' => 8765,
             'castTo'      => 'int',
         ],
+        'ws-port' => [
+            'longPrefix'  => 'ws-port',
+            'description' => 'Port for the WebSocket server (live-preview)',
+            'defaultValue' => 8766,
+            'castTo'      => 'int',
+        ],
+        'no-ws' => [
+            'longPrefix'  => 'no-ws',
+            'description' => 'Disable the WebSocket server',
+            'noValue'     => true,
+        ],
     ];
 
-    public function execute()
+    public function execute(): void
     {
-        $host = $this->cli->arguments->get('host');
-        $port = $this->cli->arguments->get('port');
+        $host = (string) $this->cli->arguments->get('host');
+        $port = (int) $this->cli->arguments->get('port');
+        $wsPort = (int) $this->cli->arguments->get('ws-port');
+        $noWs = $this->cli->arguments->defined('no-ws');
 
         $worldsDir = VISU_PATH_ROOT . '/worlds';
         if (!is_dir($worldsDir)) {
@@ -45,11 +58,35 @@ class WorldEditorCommand extends Command
 
         $this->info("Starting world editor at <green>{$url}</green>");
         $this->info("Worlds directory: <yellow>{$worldsDir}</yellow>");
+
+        // Start WebSocket server in a background process
+        $wsProcess = null;
+        if (!$noWs) {
+            $wsScript = __DIR__ . '/../WorldEditor/WebSocket/ws_server.php';
+            if (file_exists($wsScript)) {
+                $wsCmd = sprintf(
+                    'php %s %s %d &',
+                    escapeshellarg($wsScript),
+                    escapeshellarg($host),
+                    $wsPort
+                );
+                $wsProcess = @popen($wsCmd, 'r');
+                $this->info("WebSocket server at <green>ws://{$host}:{$wsPort}</green>");
+            } else {
+                $this->info("WebSocket server script not found, skipping.", true);
+            }
+        }
+
         $this->cli->out('Press <red>Ctrl+C</red> to stop the server.');
 
         // Pass config to the router via environment variables
+        $resourcesDir = defined('VISU_PATH_RESOURCES') ? VISU_PATH_RESOURCES : getcwd() . '/resources';
+        $cacheDir = defined('VISU_PATH_CACHE') ? VISU_PATH_CACHE : getcwd() . '/var/cache';
+
         putenv("VISU_WORLDS_DIR={$worldsDir}");
         putenv("VISU_EDITOR_DIST={$distDir}");
+        putenv("VISU_PATH_RESOURCES={$resourcesDir}");
+        putenv("VISU_PATH_CACHE={$cacheDir}");
 
         // Try to open browser
         $os = PHP_OS_FAMILY;
@@ -62,14 +99,21 @@ class WorldEditorCommand extends Command
         }
 
         $cmd = sprintf(
-            'VISU_WORLDS_DIR=%s VISU_EDITOR_DIST=%s php -S %s:%d %s',
+            'VISU_WORLDS_DIR=%s VISU_EDITOR_DIST=%s VISU_PATH_RESOURCES=%s VISU_PATH_CACHE=%s php -S %s:%d %s',
             escapeshellarg($worldsDir),
             escapeshellarg($distDir),
+            escapeshellarg($resourcesDir),
+            escapeshellarg($cacheDir),
             $host,
             $port,
             escapeshellarg($routerFile)
         );
 
         passthru($cmd);
+
+        // Cleanup WebSocket process
+        if ($wsProcess !== null && $wsProcess !== false) {
+            pclose($wsProcess);
+        }
     }
 }

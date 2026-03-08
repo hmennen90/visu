@@ -35,7 +35,9 @@ if (!is_string($path)) {
 if (strpos($path, '/api/') === 0) {
     require_once __DIR__ . '/Api/WorldsController.php';
 
-    $controller = new \VISU\WorldEditor\Api\WorldsController($worldsDir);
+    $resourcesDir = getenv('VISU_PATH_RESOURCES') ?: (getcwd() . '/resources');
+    $cacheDir = getenv('VISU_PATH_CACHE') ?: (getcwd() . '/var/cache');
+    $controller = new \VISU\WorldEditor\Api\WorldsController($worldsDir, $resourcesDir, $cacheDir);
     $controller->handle($method, $path);
     return true;
 }

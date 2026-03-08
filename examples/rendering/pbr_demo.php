@@ -243,6 +243,7 @@ $quickstart = new Quickstart(function (QuickstartOptions $app) use (&$state, $co
         $state->renderingSystem->setRenderTarget($target);
         $app->renderSystem($state->cameraSystem, $context);
         $app->renderSystem($state->renderingSystem, $context);
+
     };
 });
 

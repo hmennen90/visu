@@ -174,6 +174,27 @@ class PBRDeferredLightPass extends RenderPass
             $this->lightingShader->setUniform1i('num_shadow_cascades', 0);
         }
 
+        // ensure all shadow map samplers are bound to valid textures (macOS requires this)
+        /** @var \VISU\Graphics\Texture $dummyTex2D */
+        $dummyTex2D = $resources->cacheStaticResource('pbr_dummy_shadow_tex', function(GLState $gl) {
+            $tex = new \VISU\Graphics\Texture($gl, 'dummy_shadow');
+            $opts = new \VISU\Graphics\TextureOptions;
+            $opts->internalFormat = GL_DEPTH_COMPONENT;
+            $opts->dataFormat = GL_DEPTH_COMPONENT;
+            $opts->dataType = GL_FLOAT;
+            $opts->minFilter = GL_NEAREST;
+            $opts->magFilter = GL_NEAREST;
+            $opts->generateMipmaps = false;
+            $tex->allocateEmpty(1, 1, $opts);
+            return $tex;
+        });
+        $maxCascades = ($hasShadows && $shadowData->cascadeCount > 0) ? $shadowData->cascadeCount : 0;
+        for ($i = $maxCascades; $i < 4; $i++) {
+            $dummyTex2D->bind(GL_TEXTURE0 + $texUnit);
+            $this->lightingShader->setUniform1i("shadow_map_{$i}", $texUnit);
+            $texUnit++;
+        }
+
         // bind point light cubemap shadows
         $hasPointShadows = $data->has(PointLightShadowData::class);
         if ($hasPointShadows) {
@@ -195,6 +216,34 @@ class PBRDeferredLightPass extends RenderPass
             }
         } else {
             $this->lightingShader->setUniform1i('num_point_shadow_lights', 0);
+        }
+
+        // ensure all point shadow cubemap samplers are bound (macOS requires complete textures)
+        /** @var int $dummyCubemapId */
+        $dummyCubemapId = $resources->cacheStaticResource('pbr_dummy_cubemap_id', function(GLState $gl) {
+            $id = 0;
+            glGenTextures(1, $id);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, $id);
+            for ($face = 0; $face < 6; $face++) {
+                glTexImage2D(
+                    GL_TEXTURE_CUBE_MAP_POSITIVE_X + $face,
+                    0, GL_DEPTH_COMPONENT, 1, 1, 0,
+                    GL_DEPTH_COMPONENT, GL_FLOAT, null
+                );
+            }
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+            return $id;
+        });
+        $maxPointShadows = ($hasPointShadows && $pointShadowData->shadowLightCount > 0) ? $pointShadowData->shadowLightCount : 0;
+        for ($i = $maxPointShadows; $i < 4; $i++) {
+            glActiveTexture(GL_TEXTURE0 + $texUnit);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, $dummyCubemapId);
+            $this->lightingShader->setUniform1i("point_shadow_map_{$i}", $texUnit);
+            $texUnit++;
         }
 
         glDisable(GL_DEPTH_TEST);

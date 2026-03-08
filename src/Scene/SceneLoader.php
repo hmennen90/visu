@@ -12,18 +12,44 @@ use VISU\Geo\Transform;
 
 class SceneLoader implements SceneLoaderInterface
 {
+    /**
+     * Base directory for transpiled PHP factory classes.
+     * When set, loadFile() will check for a transpiled version before parsing JSON.
+     */
+    private ?string $transpiledDir = null;
+
     public function __construct(
         private ComponentRegistry $componentRegistry,
     ) {
     }
 
     /**
+     * Sets the directory where transpiled PHP factories are stored.
+     * When set, loadFile() will prefer the transpiled version if available.
+     */
+    public function setTranspiledDir(string $dir): void
+    {
+        $this->transpiledDir = rtrim($dir, '/');
+    }
+
+    /**
      * Loads a scene JSON file and populates entities in the registry.
+     * If a transpiled PHP factory exists (and transpiledDir is set),
+     * the factory is used instead of parsing JSON at runtime.
      *
      * @return array<int> List of created entity IDs.
      */
     public function loadFile(string $path, EntitiesInterface $entities): array
     {
+        // Try transpiled factory first
+        if ($this->transpiledDir !== null) {
+            $factoryClass = $this->resolveTranspiledClass($path, 'VISU\\Generated\\Scenes');
+            if ($factoryClass !== null) {
+                /** @var array<int> */
+                return $factoryClass::load($entities);
+            }
+        }
+
         if (!file_exists($path)) {
             throw new \RuntimeException("Scene file not found: {$path}");
         }
@@ -161,5 +187,49 @@ class SceneLoader implements SceneLoaderInterface
 
         $transform->markDirty();
         return $transform;
+    }
+
+    /**
+     * Resolves a JSON file path to its transpiled PHP factory class.
+     * Returns the FQCN if the file exists and the class is loadable, null otherwise.
+     *
+     * @return class-string|null
+     */
+    private function resolveTranspiledClass(string $jsonPath, string $namespace): ?string
+    {
+        $baseName = pathinfo($jsonPath, PATHINFO_FILENAME);
+        $className = $this->toClassName($baseName);
+        $fqcn = $namespace . '\\' . $className;
+
+        $subDir = match ($namespace) {
+            'VISU\\Generated\\Scenes' => 'Scenes',
+            'VISU\\Generated\\Prefabs' => 'Prefabs',
+            default => 'Scenes',
+        };
+
+        $phpFile = $this->transpiledDir . '/' . $subDir . '/' . $className . '.php';
+
+        if (!file_exists($phpFile)) {
+            return null;
+        }
+
+        if (!class_exists($fqcn, false)) {
+            require_once $phpFile;
+        }
+
+        if (!class_exists($fqcn, false)) {
+            return null;
+        }
+
+        return $fqcn;
+    }
+
+    /**
+     * Converts a file basename like "office_level1" to PascalCase "OfficeLevel1".
+     */
+    private function toClassName(string $baseName): string
+    {
+        $cleaned = preg_replace('/[^a-zA-Z0-9]+/', ' ', $baseName) ?? $baseName;
+        return str_replace(' ', '', ucwords($cleaned));
     }
 }

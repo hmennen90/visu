@@ -34,14 +34,27 @@ export const useWorldStore = defineStore('world', () => {
   const history = ref([])
   const historyIndex = ref(-1)
 
+  // asset browser
+  const assetPath = ref('')
+  const assetEntries = ref([])
+  const assetLoading = ref(false)
+
+  // scene list
+  const sceneList = ref([])
+
   // ─── Derived ──────────────────────────────────────────────────────────────
   const activeLayer = computed(() =>
     world.value?.layers.find(l => l.id === activeLayerId.value) ?? null
   )
 
   const selectedEntity = computed(() => {
-    if (!activeLayer.value || activeLayer.value.type !== 'entity') return null
-    return activeLayer.value.entities?.find(e => e.id === selectedEntityId.value) ?? null
+    if (!world.value) return null
+    for (const layer of world.value.layers) {
+      if (layer.type !== 'entity') continue
+      const e = layer.entities?.find(e => e.id === selectedEntityId.value)
+      if (e) return e
+    }
+    return null
   })
 
   // ─── Actions ──────────────────────────────────────────────────────────────
@@ -145,6 +158,36 @@ export const useWorldStore = defineStore('world', () => {
     snapshot()
   }
 
+  function renameLayer(id, name) {
+    const layer = world.value?.layers.find(l => l.id === id)
+    if (layer) {
+      layer.name = name
+      isDirty.value = true
+    }
+  }
+
+  function moveLayerUp(id) {
+    if (!world.value) return
+    const idx = world.value.layers.findIndex(l => l.id === id)
+    if (idx < world.value.layers.length - 1) {
+      const temp = world.value.layers[idx]
+      world.value.layers[idx] = world.value.layers[idx + 1]
+      world.value.layers[idx + 1] = temp
+      snapshot()
+    }
+  }
+
+  function moveLayerDown(id) {
+    if (!world.value) return
+    const idx = world.value.layers.findIndex(l => l.id === id)
+    if (idx > 0) {
+      const temp = world.value.layers[idx]
+      world.value.layers[idx] = world.value.layers[idx - 1]
+      world.value.layers[idx - 1] = temp
+      snapshot()
+    }
+  }
+
   function placeTile(gridX, gridY) {
     const layer = activeLayer.value
     if (!layer || layer.type !== 'tile' || layer.locked) return
@@ -199,14 +242,87 @@ export const useWorldStore = defineStore('world', () => {
   }
 
   function selectEntityAt(worldX, worldY, radius = 16) {
-    const layer = activeLayer.value
-    if (!layer || layer.type !== 'entity') return
-    const hit = layer.entities?.find(e => {
-      const dx = e.position.x - worldX
-      const dy = e.position.y - worldY
-      return Math.sqrt(dx * dx + dy * dy) <= radius
-    })
-    selectedEntityId.value = hit?.id ?? null
+    if (!world.value) return
+    // Search all visible entity layers, not just active
+    for (const layer of world.value.layers) {
+      if (layer.type !== 'entity' || !layer.visible) continue
+      const hit = layer.entities?.find(e => {
+        const dx = e.position.x - worldX
+        const dy = e.position.y - worldY
+        return Math.sqrt(dx * dx + dy * dy) <= radius
+      })
+      if (hit) {
+        activeLayerId.value = layer.id
+        selectedEntityId.value = hit.id
+        return
+      }
+    }
+    selectedEntityId.value = null
+  }
+
+  function moveEntityTo(entityId, x, y) {
+    if (!world.value) return
+    for (const layer of world.value.layers) {
+      if (layer.type !== 'entity') continue
+      const entity = layer.entities?.find(e => e.id === entityId)
+      if (entity) {
+        entity.position.x = x
+        entity.position.y = y
+        isDirty.value = true
+        return
+      }
+    }
+  }
+
+  function deleteSelectedEntity() {
+    if (!selectedEntity.value || !world.value) return
+    const eid = selectedEntityId.value
+    for (const layer of world.value.layers) {
+      if (layer.type !== 'entity' || !layer.entities) continue
+      const idx = layer.entities.findIndex(e => e.id === eid)
+      if (idx !== -1) {
+        layer.entities.splice(idx, 1)
+        selectedEntityId.value = null
+        snapshot()
+        return
+      }
+    }
+  }
+
+  function duplicateEntity() {
+    if (!selectedEntity.value || !world.value) return
+    const src = selectedEntity.value
+    // Find which layer it belongs to
+    for (const layer of world.value.layers) {
+      if (layer.type !== 'entity' || !layer.entities) continue
+      if (!layer.entities.find(e => e.id === src.id)) continue
+      const copy = JSON.parse(JSON.stringify(src))
+      copy.id = Date.now()
+      copy.name = src.name + ' (copy)'
+      copy.position.x += 32
+      copy.position.y += 32
+      layer.entities.push(copy)
+      selectedEntityId.value = copy.id
+      snapshot()
+      return
+    }
+  }
+
+  // ─── Asset Browser ──────────────────────────────────────────────────────
+  async function browseAssets(dir = '') {
+    assetLoading.value = true
+    try {
+      const result = await api.browseAssets(dir)
+      assetPath.value = result.path ?? ''
+      assetEntries.value = result.entries ?? []
+    } finally {
+      assetLoading.value = false
+    }
+  }
+
+  // ─── Scene List ─────────────────────────────────────────────────────────
+  async function fetchScenes() {
+    sceneList.value = await api.listScenes()
   }
 
   return {
@@ -214,12 +330,17 @@ export const useWorldStore = defineStore('world', () => {
     selectedTool, selectedEntityType, selectedTile,
     selectedEntityId, selectedEntity,
     worldList, config,
+    assetPath, assetEntries, assetLoading,
+    sceneList,
     fetchConfig, fetchWorldList,
     loadWorld, newWorld, saveCurrentWorld,
     snapshot, undo, redo,
     setActiveTool, setActiveLayer,
-    toggleLayerVisibility, toggleLayerLock, addLayer, removeLayer,
+    toggleLayerVisibility, toggleLayerLock,
+    addLayer, removeLayer, renameLayer, moveLayerUp, moveLayerDown,
     placeTile, eraseTile, placeEntity, eraseEntityAt,
     updateSelectedEntity, selectEntityAt,
+    moveEntityTo, deleteSelectedEntity, duplicateEntity,
+    browseAssets, fetchScenes,
   }
 })

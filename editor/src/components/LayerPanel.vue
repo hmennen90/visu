@@ -19,23 +19,40 @@
         @click="store.setActiveLayer(layer.id)"
       >
         <span class="layer-type" :class="layer.type">{{ layer.type === 'tile' ? 'T' : 'E' }}</span>
-        <span class="layer-name">{{ layer.name }}</span>
+        <input v-if="editingLayerId === layer.id"
+          class="layer-name-input"
+          :value="layer.name"
+          @blur="finishRename(layer.id, $event.target.value)"
+          @keyup.enter="finishRename(layer.id, $event.target.value)"
+          @keyup.escape="editingLayerId = null"
+          ref="renameInput"
+          @click.stop
+        />
+        <span v-else class="layer-name" @dblclick.stop="startRename(layer.id)">{{ layer.name }}</span>
         <div class="layer-actions">
+          <button
+            title="Move up"
+            @click.stop="store.moveLayerUp(layer.id)"
+          >^</button>
+          <button
+            title="Move down"
+            @click.stop="store.moveLayerDown(layer.id)"
+          >v</button>
           <button
             :title="layer.visible ? 'Hide' : 'Show'"
             :class="{ dim: !layer.visible }"
             @click.stop="store.toggleLayerVisibility(layer.id)"
-          >👁</button>
+          >E</button>
           <button
             :title="layer.locked ? 'Unlock' : 'Lock'"
             :class="{ dim: !layer.locked }"
             @click.stop="store.toggleLayerLock(layer.id)"
-          >🔒</button>
+          >L</button>
           <button
             title="Delete layer"
             class="del"
             @click.stop="onDelete(layer.id)"
-          >✕</button>
+          >x</button>
         </div>
       </div>
     </div>
@@ -43,9 +60,27 @@
 </template>
 
 <script setup>
+import { ref, nextTick } from 'vue'
 import { useWorldStore } from '../stores/world.js'
 
 const store = useWorldStore()
+const editingLayerId = ref(null)
+const renameInput = ref(null)
+
+function startRename(id) {
+  editingLayerId.value = id
+  nextTick(() => {
+    const input = document.querySelector('.layer-name-input')
+    if (input) { input.focus(); input.select() }
+  })
+}
+
+function finishRename(id, name) {
+  if (name.trim()) {
+    store.renameLayer(id, name.trim())
+  }
+  editingLayerId.value = null
+}
 
 function onDelete(id) {
   if (confirm('Delete this layer?')) store.removeLayer(id)
@@ -81,10 +116,14 @@ function onDelete(id) {
 .layer-type.tile { background: #2a4a2a; color: #6f6; }
 .layer-type.entity { background: #2a2a4a; color: #88f; }
 .layer-name { flex: 1; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.layer-name-input {
+  flex: 1; font-size: 12px; background: #2a2a3e; border: 1px solid #4a4aff;
+  color: #eee; padding: 1px 4px; border-radius: 2px; outline: none;
+}
 .layer-actions { display: flex; gap: 2px; }
 .layer-actions button {
   background: transparent; border: none; cursor: pointer;
-  font-size: 11px; padding: 1px 3px; opacity: 0.8; color: #ccc;
+  font-size: 10px; padding: 1px 3px; opacity: 0.6; color: #ccc;
 }
 .layer-actions button:hover { opacity: 1; }
 .layer-actions button.dim { opacity: 0.3; }

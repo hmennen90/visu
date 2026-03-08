@@ -33,6 +33,10 @@ const cam = reactive({ x: 0, y: 0, zoom: 1.0 })
 let isPanning = false
 let panStart = null
 let isDrawing = false
+let isDragging = false
+let dragEntityId = null
+let dragOffset = { x: 0, y: 0 }
+let dragStartPos = null
 const hoverWorld = ref(null)
 const hoverGrid = ref({ x: 0, y: 0 })
 
@@ -143,7 +147,7 @@ function draw() {
   }
 
   // ── Hover highlight ────────────────────────────────────────────────────────
-  if (hoverWorld.value) {
+  if (hoverWorld.value && !isDragging) {
     const hw = hoverWorld.value
     const activeLayer = store.activeLayer
     if (activeLayer?.type === 'tile' && store.selectedTool === 'place_tile') {
@@ -223,18 +227,42 @@ function drawEntityLayer(ctx, layer, tileSize) {
     ctx.lineWidth = 1 / cam.zoom
     ctx.stroke()
 
+    // Selection handles
+    if (isSelected) {
+      ctx.strokeStyle = '#7b8ff5'
+      ctx.lineWidth = 1 / cam.zoom
+      ctx.setLineDash([3 / cam.zoom, 3 / cam.zoom])
+      ctx.strokeRect(-r - 4 / cam.zoom, -r - 4 / cam.zoom, (r + 4 / cam.zoom) * 2, (r + 4 / cam.zoom) * 2)
+      ctx.setLineDash([])
+    }
+
     // Label
     ctx.rotate(-(entity.rotation ?? 0) * Math.PI / 180)
     ctx.fillStyle = '#eee'
     ctx.font = `${11 / cam.zoom}px system-ui`
     ctx.textAlign = 'center'
-    ctx.fillText(entity.type, 0, r + 12 / cam.zoom)
+    ctx.fillText(entity.name || entity.type, 0, r + 12 / cam.zoom)
 
     ctx.restore()
   }
 }
 
 // ─── Mouse events ─────────────────────────────────────────────────────────────
+function findEntityAt(wPos, radius = 16) {
+  if (!store.world) return null
+  for (let i = store.world.layers.length - 1; i >= 0; i--) {
+    const layer = store.world.layers[i]
+    if (layer.type !== 'entity' || !layer.visible || !layer.entities) continue
+    for (let j = layer.entities.length - 1; j >= 0; j--) {
+      const e = layer.entities[j]
+      const dx = e.position.x - wPos.x
+      const dy = e.position.y - wPos.y
+      if (Math.sqrt(dx * dx + dy * dy) <= radius) return e
+    }
+  }
+  return null
+}
+
 function onMouseDown(e) {
   const wPos = screenToWorld(e.offsetX, e.offsetY)
   const gPos = worldToGrid(wPos.x, wPos.y)
@@ -243,6 +271,23 @@ function onMouseDown(e) {
     // Middle mouse or alt+left = pan
     isPanning = true
     panStart = { mx: e.clientX, my: e.clientY, cx: cam.x, cy: cam.y }
+    return
+  }
+
+  if (e.button === 0 && store.selectedTool === 'select') {
+    const hit = findEntityAt(wPos)
+    if (hit) {
+      store.selectEntityAt(wPos.x, wPos.y)
+      // Start drag
+      isDragging = true
+      dragEntityId = hit.id
+      dragOffset = { x: hit.position.x - wPos.x, y: hit.position.y - wPos.y }
+      dragStartPos = { x: hit.position.x, y: hit.position.y }
+      return
+    }
+    // Clicked empty space — deselect
+    store.selectEntityAt(wPos.x, wPos.y)
+    draw()
     return
   }
 
@@ -266,6 +311,12 @@ function onMouseMove(e) {
     return
   }
 
+  if (isDragging && dragEntityId != null) {
+    store.moveEntityTo(dragEntityId, wPos.x + dragOffset.x, wPos.y + dragOffset.y)
+    draw()
+    return
+  }
+
   if (isDrawing) {
     applyTool(wPos, hoverGrid.value)
   }
@@ -275,6 +326,21 @@ function onMouseMove(e) {
 
 function onMouseUp(e) {
   if (isPanning) { isPanning = false; panStart = null; return }
+  if (isDragging) {
+    // Snapshot only if position actually changed
+    if (dragStartPos) {
+      const entity = findEntityAt({ x: 0, y: 0 }, Infinity) // dummy — find by id instead
+      const moved = store.world?.layers.some(l =>
+        l.entities?.some(e => e.id === dragEntityId &&
+          (e.position.x !== dragStartPos.x || e.position.y !== dragStartPos.y))
+      )
+      if (moved) store.snapshot()
+    }
+    isDragging = false
+    dragEntityId = null
+    dragStartPos = null
+    return
+  }
   if (isDrawing) {
     isDrawing = false
     if (['place_tile', 'erase'].includes(store.selectedTool)) {
@@ -303,20 +369,31 @@ function applyTool(wPos, gPos) {
   } else if (tool === 'place_entity') {
     store.placeEntity(wPos.x, wPos.y)
     draw()
-  } else if (tool === 'select') {
-    const active = store.activeLayer
-    if (active?.type === 'entity') {
-      store.selectEntityAt(wPos.x, wPos.y)
-      draw()
-    }
   }
 }
 
 // ─── Keyboard shortcuts ────────────────────────────────────────────────────────
 function onKeyDown(e) {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); store.undo() }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); store.undo() }
   if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); store.redo() }
   if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); store.saveCurrentWorld() }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'd') { e.preventDefault(); store.duplicateEntity() }
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    // Only delete if not focused on an input
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return
+    if (store.selectedEntityId != null) {
+      e.preventDefault()
+      store.deleteSelectedEntity()
+      draw()
+    }
+  }
+  // Tool shortcuts
+  if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+    if (e.key === 'v' || e.key === 'V') store.setActiveTool('select')
+    if (e.key === 'b' || e.key === 'B') store.setActiveTool('place_tile')
+    if (e.key === 'e' || e.key === 'E') store.setActiveTool('place_entity')
+    if (e.key === 'x' || e.key === 'X') store.setActiveTool('erase')
+  }
 }
 </script>
 

@@ -15,6 +15,7 @@
           <input :value="store.selectedEntity.type"
             @input="store.updateSelectedEntity({ type: $event.target.value })" />
         </label>
+        <div class="entity-id">ID: {{ store.selectedEntity.id }}</div>
       </div>
 
       <div class="section">
@@ -61,8 +62,14 @@
           <input class="prop-val"
             :value="val"
             @input="updateProp(key, $event.target.value)" />
+          <button class="prop-del" @click="removeProp(key)" title="Remove property">x</button>
         </div>
         <button class="add-prop" @click="addProperty">+ Add property</button>
+      </div>
+
+      <div class="section actions">
+        <button class="action-btn duplicate" @click="store.duplicateEntity">Duplicate (Ctrl+D)</button>
+        <button class="action-btn delete" @click="onDelete">Delete (Del)</button>
       </div>
     </template>
 
@@ -138,6 +145,18 @@ function addProperty() {
   const props = { ...store.selectedEntity.properties, [key]: '' }
   store.updateSelectedEntity({ properties: props })
 }
+
+function removeProp(key) {
+  const props = { ...store.selectedEntity.properties }
+  delete props[key]
+  store.updateSelectedEntity({ properties: props })
+}
+
+function onDelete() {
+  if (confirm('Delete this entity?')) {
+    store.deleteSelectedEntity()
+  }
+}
 </script>
 
 <style scoped>
@@ -160,13 +179,32 @@ input, select {
 }
 input:focus, select:focus { outline: 1px solid #4a4aff; }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.entity-id { font-size: 10px; color: #555; margin-top: 4px; }
 .prop-row { display: flex; gap: 4px; margin-bottom: 4px; align-items: center; }
-.prop-key { font-size: 11px; color: #888; width: 80px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; }
+.prop-key { font-size: 11px; color: #888; width: 70px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; }
 .prop-val { flex: 1; }
+.prop-del {
+  background: transparent; border: 1px solid #444; color: #f66;
+  width: 20px; height: 20px; cursor: pointer; border-radius: 3px;
+  font-size: 10px; padding: 0; flex-shrink: 0; display: flex;
+  align-items: center; justify-content: center;
+}
+.prop-del:hover { border-color: #f66; }
 .add-prop {
   background: transparent; border: 1px dashed #444; color: #666;
   padding: 3px 8px; cursor: pointer; border-radius: 3px; font-size: 11px;
   margin-top: 4px; width: 100%;
 }
 .add-prop:hover { border-color: #7b8ff5; color: #7b8ff5; }
+.actions { display: flex; flex-direction: column; gap: 4px; }
+.action-btn {
+  background: #2a2a3e; border: 1px solid #444; color: #ccc;
+  padding: 5px 8px; cursor: pointer; border-radius: 3px; font-size: 11px;
+  width: 100%; text-align: center;
+}
+.action-btn:hover { background: #3a3a5e; }
+.action-btn.delete { color: #f66; border-color: #633; }
+.action-btn.delete:hover { background: #3a1a1a; border-color: #f66; }
+.action-btn.duplicate { color: #7b8ff5; border-color: #446; }
+.action-btn.duplicate:hover { background: #1a1a3a; border-color: #7b8ff5; }
 </style>

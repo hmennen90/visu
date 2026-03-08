@@ -48,6 +48,11 @@ import app
 @visu.command.world_editor: VISU\Command\WorldEditorCommand
     = command: 'world-editor'
 
+@visu.component_registry: VISU\ECS\ComponentRegistry
+
+@visu.command.transpile: VISU\Command\TranspileCommand(@visu.component_registry)
+    = command: 'transpile'
+
 /**
  * Maker / CodeGenerator
  *

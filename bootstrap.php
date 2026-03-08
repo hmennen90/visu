@@ -34,6 +34,27 @@ if (!defined('VISU_APPCONFIG_ROOT')) define('VISU_APPCONFIG_ROOT', '/app.ctn');
 
 /**
  * ----------------------------------------------------------------------------
+ * Ensure required directories exist
+ * ----------------------------------------------------------------------------
+ *
+ * When VISU is required as a dependency in a new project, these directories
+ * may not exist yet. Create them early so the container factory and all
+ * downstream code can rely on their presence.
+ */
+foreach ([
+    VISU_PATH_CACHE,
+    VISU_PATH_STORE,
+    VISU_PATH_RESOURCES,
+    VISU_PATH_RESOURCES_SHADER,
+    VISU_PATH_APPCONFIG,
+] as $requiredDir) {
+    if (!is_dir($requiredDir)) {
+        mkdir($requiredDir, 0777, true);
+    }
+}
+
+/**
+ * ----------------------------------------------------------------------------
  * Setup the Container
  * ----------------------------------------------------------------------------
  *
@@ -43,9 +64,6 @@ $factory = new \ClanCats\Container\ContainerFactory(VISU_PATH_CACHE);
 
 $container = $factory->create('GameContainer', function($builder)
 {
-    // ensure var directory with cache and store exists
-    if (!file_exists(VISU_PATH_CACHE)) mkdir(VISU_PATH_CACHE, 0777, true);
-    if (!file_exists(VISU_PATH_STORE)) mkdir(VISU_PATH_STORE, 0777, true);
 
     // Ensure app.ctn exists in the project root. When VISU is used as an engine
     // dependency, projects may not have created one yet — create an empty one so

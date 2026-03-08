@@ -53,6 +53,9 @@ import app
 @visu.command.transpile: VISU\Command\TranspileCommand(@visu.component_registry)
     = command: 'transpile'
 
+@visu.command.setup: VISU\Command\SetupCommand
+    = command: 'setup'
+
 /**
  * Maker / CodeGenerator
  *

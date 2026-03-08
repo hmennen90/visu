@@ -33,6 +33,12 @@
     "scripts": {
         "post-autoload-dump": [
             "ClanCats\\Container\\ComposerContainerFileLoader::generateMap"
+        ],
+        "post-install-cmd": [
+            "VISU\\Setup\\ComposerSetupScript::postInstall"
+        ],
+        "post-update-cmd": [
+            "VISU\\Setup\\ComposerSetupScript::postUpdate"
         ]
     },
     "extra": {

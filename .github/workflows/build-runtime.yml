@@ -71,6 +71,38 @@ jobs:
             libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
             libwayland-dev libxkbcommon-dev wayland-protocols extra-cmake-modules
 
+      - name: Add GLFW Linux support to static-php-cli
+        if: runner.os == 'Linux'
+        run: |
+          # Create Linux GLFW library builder (mirrors the macOS version)
+          cat > src/SPC/builder/linux/library/glfw.php << 'EOF'
+          <?php
+          declare(strict_types=1);
+          namespace SPC\builder\linux\library;
+          use SPC\util\executor\UnixCMakeExecutor;
+
+          class glfw extends LinuxLibraryBase
+          {
+              public const NAME = 'glfw';
+
+              protected function build(): void
+              {
+                  UnixCMakeExecutor::create($this)
+                      ->setBuildDir("{$this->source_dir}/vendor/glfw")
+                      ->setReset(false)
+                      ->addConfigureArgs(
+                          '-DGLFW_BUILD_EXAMPLES=OFF',
+                          '-DGLFW_BUILD_TESTS=OFF',
+                          '-DGLFW_BUILD_WAYLAND=OFF',
+                      )
+                      ->build('.');
+                  $this->patchPkgconfPrefix(['glfw3.pc']);
+              }
+          }
+          EOF
+          # Fix heredoc indentation
+          sed -i 's/^          //' src/SPC/builder/linux/library/glfw.php
+
       - name: Install build tools (macOS)
         if: runner.os == 'macOS'
         run: brew install cmake pkg-config

@@ -75,6 +75,10 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install cmake pkg-config
 
+      - name: Check build environment (Unix)
+        if: runner.os != 'Windows'
+        run: php bin/spc doctor --auto-fix
+
       - name: Build micro.sfx (Unix)
         if: runner.os != 'Windows'
         run: php bin/spc build glfw,mbstring,zip,phar --build-micro

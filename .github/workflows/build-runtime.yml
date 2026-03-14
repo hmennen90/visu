@@ -56,6 +56,8 @@ jobs:
 
       - name: Download sources (Unix)
         if: runner.os != 'Windows'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           php bin/spc download \
             --with-php=${{ inputs.php_version }} \
@@ -142,6 +144,8 @@ jobs:
       - name: Download sources (Windows)
         if: runner.os == 'Windows'
         shell: powershell
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           php bin/spc download `
             --with-php=${{ inputs.php_version }} `

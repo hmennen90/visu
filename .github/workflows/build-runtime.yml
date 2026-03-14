@@ -24,9 +24,8 @@ jobs:
           - os: macos
             arch: arm64
             runner: macos-14
-          - os: macos
-            arch: x86_64
-            runner: macos-13
+          # macOS x86_64: no free Intel runners available (macos-13 retired)
+          # Build locally or use macos-13-xlarge (paid) when needed
           - os: linux
             arch: x86_64
             runner: ubuntu-latest
@@ -151,7 +150,6 @@ jobs:
             | Platform | Architecture | File |
             |----------|-------------|------|
             | macOS | arm64 (Apple Silicon) | `micro-macos-arm64.sfx` |
-            | macOS | x86_64 (Intel) | `micro-macos-x86_64.sfx` |
             | Linux | x86_64 | `micro-linux-x86_64.sfx` |
             | Linux | arm64 | `micro-linux-arm64.sfx` |
             | Windows | x86_64 | `micro-windows-x86_64.sfx` |

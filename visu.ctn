@@ -56,6 +56,9 @@ import app
 @visu.command.setup: VISU\Command\SetupCommand
     = command: 'setup'
 
+@visu.command.build: VISU\Command\BuildCommand
+    = command: 'build'
+
 /**
  * Maker / CodeGenerator
  *

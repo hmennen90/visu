@@ -47,11 +47,12 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
+          php-version: '8.3'
+          extensions: dom, curl, mbstring, xml, tokenizer
           tools: composer
 
       - name: Install Composer dependencies
-        run: composer install --no-dev --no-interaction
+        run: composer install --no-dev --no-interaction --ignore-platform-reqs
 
       # ── Unix builds (macOS + Linux) ──
 

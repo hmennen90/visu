@@ -23,8 +23,6 @@ jobs:
           - os: macos
             arch: arm64
             runner: macos-14
-          # macOS x86_64: no free Intel runners available (macos-13 retired)
-          # Build locally or use macos-13-xlarge (paid) when needed
           - os: linux
             arch: x86_64
             runner: ubuntu-latest
@@ -52,7 +50,7 @@ jobs:
       - name: Install Composer dependencies
         run: composer install --no-dev --no-interaction --ignore-platform-reqs
 
-      # ── Unix builds (macOS + Linux) ──
+      # ── Download sources ──
 
       - name: Download sources (Unix)
         if: runner.os != 'Windows'
@@ -64,51 +62,81 @@ jobs:
             --for-extensions=glfw,mbstring,zip,phar \
             --prefer-pre-built
 
+      - name: Download sources (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          php bin/spc download `
+            --with-php=${{ inputs.php_version }} `
+            --for-extensions=glfw,mbstring,zip,phar `
+            --prefer-pre-built
+
+      # ── Platform-specific build tools ──
+
       - name: Install build tools (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             build-essential cmake pkg-config \
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-            libwayland-dev libxkbcommon-dev wayland-protocols extra-cmake-modules
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
 
-      - name: Add GLFW Linux support to static-php-cli
+      - name: Install build tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake pkg-config
+
+      # ── Patch static-php-cli for GLFW support ──
+      # These patches add proper Linux support and fix macOS C++ linking.
+      # TODO: submit as upstream PR to crazywhalecc/static-php-cli
+
+      - name: Patch GLFW for Linux
         if: runner.os == 'Linux'
         run: |
-          # Symlink X11 headers and libs into buildroot so the musl toolchain finds them
-          mkdir -p buildroot/include buildroot/lib
+          # 1. Enable Linux support in ext.json
+          php -r '
+            $f = "config/ext.json";
+            $d = json_decode(file_get_contents($f), true);
+            $d["glfw"]["support"]["Linux"] = "yes";
+            file_put_contents($f, json_encode($d, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+          '
+
+          # 2. Add Linux static libs to lib.json
+          php -r '
+            $f = "config/lib.json";
+            $d = json_decode(file_get_contents($f), true);
+            $d["glfw"]["static-libs-linux"] = ["libglfw3.a"];
+            $d["glfw"]["headers"] = ["GLFW"];
+            file_put_contents($f, json_encode($d, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+          '
+
+          # 3. Symlink X11 headers and static libs into buildroot
+          mkdir -p buildroot/include buildroot/lib buildroot/lib/pkgconfig
+          ARCH=$(dpkg --print-architecture)
+          if [ "$ARCH" = "amd64" ]; then LIBDIR="/usr/lib/x86_64-linux-gnu"; fi
+          if [ "$ARCH" = "arm64" ]; then LIBDIR="/usr/lib/aarch64-linux-gnu"; fi
+
           for dir in X11 GL; do
             [ -d "/usr/include/$dir" ] && ln -sf "/usr/include/$dir" "buildroot/include/$dir"
           done
-          # Link X11-related headers that live directly in /usr/include
-          for hdr in /usr/include/X11/*.h /usr/include/GL/*.h; do
-            [ -f "$hdr" ] && ln -sf "$hdr" "buildroot/include/$(basename "$hdr")" 2>/dev/null || true
+          for lib in libX11.a libXrandr.a libXinerama.a libXcursor.a libXi.a \
+                     libXext.a libXfixes.a libXrender.a libxcb.a libXau.a libXdmcp.a; do
+            [ -f "${LIBDIR}/${lib}" ] && ln -sf "${LIBDIR}/${lib}" "buildroot/lib/${lib}"
           done
-          # Link X11 static libraries
-          for lib in /usr/lib/x86_64-linux-gnu/libX*.a /usr/lib/aarch64-linux-gnu/libX*.a; do
-            [ -f "$lib" ] && ln -sf "$lib" "buildroot/lib/$(basename "$lib")" 2>/dev/null || true
-          done
-
-          # Also copy pkg-config files for X11
-          mkdir -p buildroot/lib/pkgconfig
-          for pc in x11 xrandr xinerama xcursor xi xext xfixes xrender; do
-            for pcfile in /usr/lib/*/pkgconfig/${pc}.pc; do
-              [ -f "$pcfile" ] && cp "$pcfile" "buildroot/lib/pkgconfig/" 2>/dev/null || true
-            done
+          for pc in x11 xrandr xinerama xcursor xi xext xfixes xrender xcb xau xdmcp; do
+            [ -f "${LIBDIR}/pkgconfig/${pc}.pc" ] && cp "${LIBDIR}/pkgconfig/${pc}.pc" buildroot/lib/pkgconfig/
           done
 
-          # Create Linux GLFW library builder (mirrors the macOS version)
-          cat > src/SPC/builder/linux/library/glfw.php << 'EOF'
+          # 4. Create Linux GLFW library builder class
+          cat > src/SPC/builder/linux/library/glfw.php << 'LIBEOF'
           <?php
           declare(strict_types=1);
           namespace SPC\builder\linux\library;
           use SPC\util\executor\UnixCMakeExecutor;
-
           class glfw extends LinuxLibraryBase
           {
               public const NAME = 'glfw';
-
               protected function build(): void
               {
                   UnixCMakeExecutor::create($this)
@@ -123,19 +151,12 @@ jobs:
                   $this->patchPkgconfPrefix(['glfw3.pc']);
               }
           }
-          EOF
-          # Fix heredoc indentation
+          LIBEOF
           sed -i 's/^          //' src/SPC/builder/linux/library/glfw.php
 
-      - name: Install build tools (macOS)
-        if: runner.os == 'macOS'
-        run: brew install cmake pkg-config
-
-      - name: Patch GLFW extension for all platforms
+      - name: Patch GLFW extension for C++ linking
         if: runner.os != 'Windows'
-        shell: bash
         run: |
-          # Rewrite glfw extension to handle macOS (-lc++) and Linux (X11 libs)
           cat > src/SPC/builder/extension/glfw.php << 'EXTEOF'
           <?php
           declare(strict_types=1);
@@ -156,7 +177,11 @@ jobs:
               {
                   FileSystem::replaceFileStr(SOURCE_PATH . '/php-src/configure', '-lglfw ', '-lglfw3 ');
                   if (PHP_OS_FAMILY === 'Darwin') {
-                      FileSystem::replaceFileStr(SOURCE_PATH . '/php-src/configure', '-framework IOKit', '-framework IOKit -lc++');
+                      FileSystem::replaceFileStr(
+                          SOURCE_PATH . '/php-src/configure',
+                          '-framework IOKit',
+                          '-framework IOKit -lc++'
+                      );
                   }
                   return true;
               }
@@ -171,8 +196,11 @@ jobs:
           }
           EXTEOF
           sed -i.bak 's/^          //' src/SPC/builder/extension/glfw.php
+          rm -f src/SPC/builder/extension/glfw.php.bak
 
-      - name: Check build environment (Unix)
+      # ── Build ──
+
+      - name: Doctor check (Unix)
         if: runner.os != 'Windows'
         run: php bin/spc doctor --auto-fix
 
@@ -180,20 +208,7 @@ jobs:
         if: runner.os != 'Windows'
         run: php bin/spc build glfw,mbstring,zip,phar --build-micro --debug
 
-      # ── Windows build ──
-
-      - name: Download sources (Windows)
-        if: runner.os == 'Windows'
-        shell: powershell
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          php bin/spc download `
-            --with-php=${{ inputs.php_version }} `
-            --for-extensions=glfw,mbstring,zip,phar `
-            --prefer-pre-built
-
-      - name: Setup Windows build environment
+      - name: Doctor check (Windows)
         if: runner.os == 'Windows'
         shell: powershell
         run: php bin/spc doctor --auto-fix

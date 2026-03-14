@@ -47,7 +47,7 @@ class BuildConfig
         // Read defaults from composer.json
         $composerFile = $projectRoot . '/composer.json';
         if (file_exists($composerFile)) {
-            $composer = json_decode(file_get_contents($composerFile), true);
+            $composer = json_decode((string) file_get_contents($composerFile), true);
             if (is_array($composer)) {
                 if (isset($composer['name'])) {
                     $parts = explode('/', $composer['name']);
@@ -62,7 +62,7 @@ class BuildConfig
         // Override with build.json if present
         $buildFile = $projectRoot . '/build.json';
         if (file_exists($buildFile)) {
-            $build = json_decode(file_get_contents($buildFile), true);
+            $build = json_decode((string) file_get_contents($buildFile), true);
             if (is_array($build)) {
                 $config->applyBuildJson($build);
             }

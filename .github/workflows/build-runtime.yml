@@ -34,11 +34,11 @@ jobs:
             runner: windows-latest
 
     steps:
-      - name: Checkout static-php-cli
+      - name: Checkout static-php-cli (fork with GLFW patches)
         uses: actions/checkout@v4
         with:
-          repository: crazywhalecc/static-php-cli
-          ref: main
+          repository: hmennen90/static-php-cli
+          ref: visu-patches
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -83,35 +83,9 @@ jobs:
             build-essential cmake pkg-config \
             libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
 
-      - name: Install build tools (macOS)
-        if: runner.os == 'macOS'
-        run: brew install cmake pkg-config
-
-      # ── Patch static-php-cli for GLFW support ──
-      # These patches add proper Linux support and fix macOS C++ linking.
-      # TODO: submit as upstream PR to crazywhalecc/static-php-cli
-
-      - name: Patch GLFW for Linux
+      - name: Symlink X11 into buildroot (Linux)
         if: runner.os == 'Linux'
         run: |
-          # 1. Enable Linux support in ext.json
-          php -r '
-            $f = "config/ext.json";
-            $d = json_decode(file_get_contents($f), true);
-            $d["glfw"]["support"]["Linux"] = "yes";
-            file_put_contents($f, json_encode($d, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
-          '
-
-          # 2. Add Linux static libs to lib.json
-          php -r '
-            $f = "config/lib.json";
-            $d = json_decode(file_get_contents($f), true);
-            $d["glfw"]["static-libs-linux"] = ["libglfw3.a"];
-            $d["glfw"]["headers"] = ["GLFW"];
-            file_put_contents($f, json_encode($d, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
-          '
-
-          # 3. Symlink X11 headers and static libs into buildroot
           mkdir -p buildroot/include buildroot/lib buildroot/lib/pkgconfig
           ARCH=$(dpkg --print-architecture)
           if [ "$ARCH" = "amd64" ]; then LIBDIR="/usr/lib/x86_64-linux-gnu"; fi
@@ -128,75 +102,9 @@ jobs:
             [ -f "${LIBDIR}/pkgconfig/${pc}.pc" ] && cp "${LIBDIR}/pkgconfig/${pc}.pc" buildroot/lib/pkgconfig/
           done
 
-          # 4. Create Linux GLFW library builder class
-          cat > src/SPC/builder/linux/library/glfw.php << 'LIBEOF'
-          <?php
-          declare(strict_types=1);
-          namespace SPC\builder\linux\library;
-          use SPC\util\executor\UnixCMakeExecutor;
-          class glfw extends LinuxLibraryBase
-          {
-              public const NAME = 'glfw';
-              protected function build(): void
-              {
-                  UnixCMakeExecutor::create($this)
-                      ->setBuildDir("{$this->source_dir}/vendor/glfw")
-                      ->setReset(false)
-                      ->addConfigureArgs(
-                          '-DGLFW_BUILD_EXAMPLES=OFF',
-                          '-DGLFW_BUILD_TESTS=OFF',
-                          '-DGLFW_BUILD_WAYLAND=OFF',
-                      )
-                      ->build('.');
-                  $this->patchPkgconfPrefix(['glfw3.pc']);
-              }
-          }
-          LIBEOF
-          sed -i 's/^          //' src/SPC/builder/linux/library/glfw.php
-
-      - name: Patch GLFW extension for C++ linking
-        if: runner.os != 'Windows'
-        run: |
-          cat > src/SPC/builder/extension/glfw.php << 'EXTEOF'
-          <?php
-          declare(strict_types=1);
-          namespace SPC\builder\extension;
-          use SPC\builder\Extension;
-          use SPC\store\FileSystem;
-          use SPC\util\CustomExt;
-          #[CustomExt('glfw')]
-          class glfw extends Extension
-          {
-              public function patchBeforeBuildconf(): bool
-              {
-                  if (file_exists(SOURCE_PATH . '/php-src/ext/glfw')) { return false; }
-                  FileSystem::copyDir(SOURCE_PATH . '/ext-glfw', SOURCE_PATH . '/php-src/ext/glfw');
-                  return true;
-              }
-              public function patchBeforeConfigure(): bool
-              {
-                  FileSystem::replaceFileStr(SOURCE_PATH . '/php-src/configure', '-lglfw ', '-lglfw3 ');
-                  if (PHP_OS_FAMILY === 'Darwin') {
-                      FileSystem::replaceFileStr(
-                          SOURCE_PATH . '/php-src/configure',
-                          '-framework IOKit',
-                          '-framework IOKit -lc++'
-                      );
-                  }
-                  return true;
-              }
-              public function getUnixConfigureArg(bool $shared = false): string
-              {
-                  return '--enable-glfw --with-glfw-dir=' . BUILD_ROOT_PATH;
-              }
-              public function getWindowsConfigureArg(bool $shared = false): string
-              {
-                  return '--enable-glfw=static';
-              }
-          }
-          EXTEOF
-          sed -i.bak 's/^          //' src/SPC/builder/extension/glfw.php
-          rm -f src/SPC/builder/extension/glfw.php.bak
+      - name: Install build tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake pkg-config
 
       # ── Build ──
 

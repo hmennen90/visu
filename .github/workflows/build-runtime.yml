@@ -74,6 +74,28 @@ jobs:
       - name: Add GLFW Linux support to static-php-cli
         if: runner.os == 'Linux'
         run: |
+          # Symlink X11 headers and libs into buildroot so the musl toolchain finds them
+          mkdir -p buildroot/include buildroot/lib
+          for dir in X11 GL; do
+            [ -d "/usr/include/$dir" ] && ln -sf "/usr/include/$dir" "buildroot/include/$dir"
+          done
+          # Link X11-related headers that live directly in /usr/include
+          for hdr in /usr/include/X11/*.h /usr/include/GL/*.h; do
+            [ -f "$hdr" ] && ln -sf "$hdr" "buildroot/include/$(basename "$hdr")" 2>/dev/null || true
+          done
+          # Link X11 static libraries
+          for lib in /usr/lib/x86_64-linux-gnu/libX*.a /usr/lib/aarch64-linux-gnu/libX*.a; do
+            [ -f "$lib" ] && ln -sf "$lib" "buildroot/lib/$(basename "$lib")" 2>/dev/null || true
+          done
+
+          # Also copy pkg-config files for X11
+          mkdir -p buildroot/lib/pkgconfig
+          for pc in x11 xrandr xinerama xcursor xi xext xfixes xrender; do
+            for pcfile in /usr/lib/*/pkgconfig/${pc}.pc; do
+              [ -f "$pcfile" ] && cp "$pcfile" "buildroot/lib/pkgconfig/" 2>/dev/null || true
+            done
+          done
+
           # Create Linux GLFW library builder (mirrors the macOS version)
           cat > src/SPC/builder/linux/library/glfw.php << 'EOF'
           <?php

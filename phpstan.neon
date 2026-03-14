@@ -29,6 +29,7 @@ parameters:
         - '/Cannot call method .* on GL\\VectorGraphics\\VGContext\|null\./'
         # FFI — PHPStan cannot statically analyze FFI method calls and CData access
         - '/Call to an undefined method FFI::/'
+        - '/Access to an undefined property FFI\\CData::\$\w+/'
         - '/Cannot access property \$\w+ on FFI.CData\|null/'
         - '/Parameter .* expects FFI.CData, FFI.CData\|null given/'
         - '/Cannot cast .* to int\.$/'
@@ -36,4 +37,5 @@ parameters:
         - '/Offset .* on array\|false/'
         - '/Binary operation .* between .* FFI.CData/'
         - '/does not accept array<bool\|FFI/'
+        - '/Deprecated in PHP 8.4: Parameter .* is implicitly nullable/'
         - '/\(array<int, array\{source:/'

@@ -131,13 +131,54 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install cmake pkg-config
 
+      - name: Patch GLFW extension for all platforms
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          # Rewrite glfw extension to handle macOS (-lc++) and Linux (X11 libs)
+          cat > src/SPC/builder/extension/glfw.php << 'EXTEOF'
+          <?php
+          declare(strict_types=1);
+          namespace SPC\builder\extension;
+          use SPC\builder\Extension;
+          use SPC\store\FileSystem;
+          use SPC\util\CustomExt;
+          #[CustomExt('glfw')]
+          class glfw extends Extension
+          {
+              public function patchBeforeBuildconf(): bool
+              {
+                  if (file_exists(SOURCE_PATH . '/php-src/ext/glfw')) { return false; }
+                  FileSystem::copyDir(SOURCE_PATH . '/ext-glfw', SOURCE_PATH . '/php-src/ext/glfw');
+                  return true;
+              }
+              public function patchBeforeConfigure(): bool
+              {
+                  FileSystem::replaceFileStr(SOURCE_PATH . '/php-src/configure', '-lglfw ', '-lglfw3 ');
+                  if (PHP_OS_FAMILY === 'Darwin') {
+                      FileSystem::replaceFileStr(SOURCE_PATH . '/php-src/configure', '-framework IOKit', '-framework IOKit -lc++');
+                  }
+                  return true;
+              }
+              public function getUnixConfigureArg(bool $shared = false): string
+              {
+                  return '--enable-glfw --with-glfw-dir=' . BUILD_ROOT_PATH;
+              }
+              public function getWindowsConfigureArg(bool $shared = false): string
+              {
+                  return '--enable-glfw=static';
+              }
+          }
+          EXTEOF
+          sed -i.bak 's/^          //' src/SPC/builder/extension/glfw.php
+
       - name: Check build environment (Unix)
         if: runner.os != 'Windows'
         run: php bin/spc doctor --auto-fix
 
       - name: Build micro.sfx (Unix)
         if: runner.os != 'Windows'
-        run: php bin/spc build glfw,mbstring,zip,phar --build-micro
+        run: php bin/spc build glfw,mbstring,zip,phar --build-micro --debug
 
       # ── Windows build ──
 
@@ -160,7 +201,7 @@ jobs:
       - name: Build micro.sfx (Windows)
         if: runner.os == 'Windows'
         shell: powershell
-        run: php bin/spc build glfw,mbstring,zip,phar --build-micro
+        run: php bin/spc build glfw,mbstring,zip,phar --build-micro --debug
 
       # ── Upload ──
 

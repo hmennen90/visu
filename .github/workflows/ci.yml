@@ -30,7 +30,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            php-dev build-essential cmake \
+            php${{ matrix.php }}-dev php${{ matrix.php }}-xml php${{ matrix.php }}-curl \
+            build-essential cmake \
             libglfw3-dev xvfb \
             libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
 
@@ -69,7 +70,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            php-dev build-essential cmake \
+            php8.4-dev php8.4-xml php8.4-curl \
+            build-essential cmake \
             libglfw3-dev \
             libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
 

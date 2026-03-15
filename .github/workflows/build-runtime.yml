@@ -13,28 +13,12 @@ on:
           - '8.5'
 
 jobs:
-  build:
-    name: micro.sfx / ${{ matrix.os }}-${{ matrix.arch }} / PHP ${{ inputs.php_version }}
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos
-            arch: arm64
-            runner: macos-14
-          - os: linux
-            arch: x86_64
-            runner: ubuntu-latest
-          - os: linux
-            arch: arm64
-            runner: ubuntu-24.04-arm
-          - os: windows
-            arch: x86_64
-            runner: windows-latest
-
+  # ── macOS build (native) ──
+  build-macos:
+    name: micro.sfx / macos-arm64 / PHP ${{ inputs.php_version }}
+    runs-on: macos-14
     steps:
-      - name: Checkout static-php-cli (fork with GLFW patches)
+      - name: Checkout static-php-cli (fork)
         uses: actions/checkout@v4
         with:
           repository: hmennen90/static-php-cli
@@ -47,13 +31,12 @@ jobs:
           extensions: dom, curl, mbstring, xml, tokenizer
           tools: composer
 
-      - name: Install Composer dependencies
-        run: composer install --no-dev --no-interaction --ignore-platform-reqs
+      - name: Install dependencies
+        run: |
+          composer install --no-dev --no-interaction --ignore-platform-reqs
+          brew install cmake pkg-config
 
-      # ── Download sources ──
-
-      - name: Download sources (Unix)
-        if: runner.os != 'Windows'
+      - name: Download sources
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -62,8 +45,131 @@ jobs:
             --for-extensions=glfw,mbstring,zip,phar \
             --prefer-pre-built
 
-      - name: Download sources (Windows)
-        if: runner.os == 'Windows'
+      - name: Build micro.sfx
+        run: |
+          php bin/spc doctor --auto-fix
+          php bin/spc build glfw,mbstring,zip,phar --build-micro --debug
+
+      - name: Upload micro.sfx
+        uses: actions/upload-artifact@v4
+        with:
+          name: micro-macos-arm64
+          path: buildroot/bin/micro.sfx
+          retention-days: 90
+
+  # ── Linux builds (Alpine Docker for musl-compatible X11) ──
+  build-linux:
+    name: micro.sfx / linux-${{ matrix.arch }} / PHP ${{ inputs.php_version }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout static-php-cli (fork)
+        uses: actions/checkout@v4
+        with:
+          repository: hmennen90/static-php-cli
+          ref: main
+
+      - name: Build micro.sfx in Alpine container
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          docker build -t spc-glfw -f- . << 'DOCKERFILE'
+          FROM alpine:3.21
+
+          RUN apk update && apk upgrade -a && apk add --no-cache \
+              autoconf automake bash binutils bison build-base cmake curl \
+              file flex g++ gcc git jq libgcc libtool libstdc++ \
+              linux-headers m4 make pkgconfig re2c wget xz gettext-dev \
+              binutils-gold \
+              libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+              mesa-dev
+
+          RUN curl -#fSL https://dl.static-php.dev/static-php-cli/bulk/php-8.4.4-cli-linux-$(uname -m).tar.gz \
+              | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/php
+          RUN curl -#fSL https://getcomposer.org/download/latest-stable/composer.phar \
+              -o /usr/local/bin/composer && chmod +x /usr/local/bin/composer
+
+          WORKDIR /app
+          DOCKERFILE
+
+          docker run --rm \
+            -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
+            -v "$(pwd)/config:/app/config" \
+            -v "$(pwd)/src:/app/src" \
+            -v "$(pwd)/bin:/app/bin" \
+            -v "$(pwd)/composer.json:/app/composer.json" \
+            -v "$(pwd)/composer.lock:/app/composer.lock" \
+            -v "$(pwd)/buildroot:/app/buildroot" \
+            -v "$(pwd)/source:/app/source" \
+            -v "$(pwd)/downloads:/app/downloads" \
+            -v "$(pwd)/pkgroot:/app/pkgroot" \
+            -v "$(pwd)/log:/app/log" \
+            spc-glfw bash -c '
+              composer install --no-dev --no-interaction --ignore-platform-reqs
+              bin/spc doctor --auto-fix
+
+              # Symlink Alpine musl X11 libs into buildroot
+              mkdir -p buildroot/include buildroot/lib buildroot/lib/pkgconfig
+              for dir in X11 GL; do
+                [ -d "/usr/include/$dir" ] && ln -sf "/usr/include/$dir" buildroot/include/$dir
+              done
+              for lib in /usr/lib/libX11.a /usr/lib/libXrandr.a /usr/lib/libXinerama.a \
+                         /usr/lib/libXcursor.a /usr/lib/libXi.a /usr/lib/libXext.a \
+                         /usr/lib/libXfixes.a /usr/lib/libXrender.a /usr/lib/libxcb.a \
+                         /usr/lib/libXau.a /usr/lib/libXdmcp.a; do
+                [ -f "$lib" ] && ln -sf "$lib" buildroot/lib/$(basename "$lib")
+              done
+              for pc in /usr/lib/pkgconfig/x11.pc /usr/lib/pkgconfig/xrandr.pc \
+                        /usr/lib/pkgconfig/xinerama.pc /usr/lib/pkgconfig/xcursor.pc \
+                        /usr/lib/pkgconfig/xi.pc /usr/lib/pkgconfig/xext.pc \
+                        /usr/lib/pkgconfig/xfixes.pc /usr/lib/pkgconfig/xrender.pc \
+                        /usr/lib/pkgconfig/xcb.pc /usr/lib/pkgconfig/xau.pc \
+                        /usr/lib/pkgconfig/xdmcp.pc; do
+                [ -f "$pc" ] && cp "$pc" buildroot/lib/pkgconfig/
+              done
+
+              bin/spc download --with-php=${{ inputs.php_version }} \
+                --for-extensions=glfw,mbstring,zip,phar --prefer-pre-built
+              bin/spc build glfw,mbstring,zip,phar --build-micro --debug
+            '
+
+      - name: Upload micro.sfx
+        uses: actions/upload-artifact@v4
+        with:
+          name: micro-linux-${{ matrix.arch }}
+          path: buildroot/bin/micro.sfx
+          retention-days: 90
+
+  # ── Windows build ──
+  build-windows:
+    name: micro.sfx / windows-x86_64 / PHP ${{ inputs.php_version }}
+    runs-on: windows-latest
+    steps:
+      - name: Checkout static-php-cli (fork)
+        uses: actions/checkout@v4
+        with:
+          repository: hmennen90/static-php-cli
+          ref: main
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, curl, mbstring, xml, tokenizer
+          tools: composer
+
+      - name: Install dependencies
+        run: composer install --no-dev --no-interaction --ignore-platform-reqs
+
+      - name: Download sources
         shell: powershell
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -73,71 +179,23 @@ jobs:
             --for-extensions=glfw,mbstring,zip,phar `
             --prefer-pre-built
 
-      # ── Platform-specific build tools ──
-
-      - name: Install build tools (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential cmake pkg-config \
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
-
-      - name: Symlink X11 into buildroot (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          mkdir -p buildroot/include buildroot/lib buildroot/lib/pkgconfig
-          ARCH=$(dpkg --print-architecture)
-          if [ "$ARCH" = "amd64" ]; then LIBDIR="/usr/lib/x86_64-linux-gnu"; fi
-          if [ "$ARCH" = "arm64" ]; then LIBDIR="/usr/lib/aarch64-linux-gnu"; fi
-
-          for dir in X11 GL; do
-            [ -d "/usr/include/$dir" ] && ln -sf "/usr/include/$dir" "buildroot/include/$dir"
-          done
-          for lib in libX11.a libXrandr.a libXinerama.a libXcursor.a libXi.a \
-                     libXext.a libXfixes.a libXrender.a libxcb.a libXau.a libXdmcp.a; do
-            [ -f "${LIBDIR}/${lib}" ] && ln -sf "${LIBDIR}/${lib}" "buildroot/lib/${lib}"
-          done
-          for pc in x11 xrandr xinerama xcursor xi xext xfixes xrender xcb xau xdmcp; do
-            [ -f "${LIBDIR}/pkgconfig/${pc}.pc" ] && cp "${LIBDIR}/pkgconfig/${pc}.pc" buildroot/lib/pkgconfig/
-          done
-
-      - name: Install build tools (macOS)
-        if: runner.os == 'macOS'
-        run: brew install cmake pkg-config
-
-      # ── Build ──
-
-      - name: Doctor check (Unix)
-        if: runner.os != 'Windows'
-        run: php bin/spc doctor --auto-fix
-
-      - name: Build micro.sfx (Unix)
-        if: runner.os != 'Windows'
-        run: php bin/spc build glfw,mbstring,zip,phar --build-micro --debug
-
-      - name: Doctor check (Windows)
-        if: runner.os == 'Windows'
+      - name: Build micro.sfx
         shell: powershell
-        run: php bin/spc doctor --auto-fix
-
-      - name: Build micro.sfx (Windows)
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: php bin/spc build glfw,mbstring,zip,phar --build-micro --debug
-
-      # ── Upload ──
+        run: |
+          php bin/spc doctor --auto-fix
+          php bin/spc build glfw,mbstring,zip,phar --build-micro --debug
 
       - name: Upload micro.sfx
         uses: actions/upload-artifact@v4
         with:
-          name: micro-${{ matrix.os }}-${{ matrix.arch }}
+          name: micro-windows-x86_64
           path: buildroot/bin/micro.sfx
           retention-days: 90
 
+  # ── Release ──
   release:
     name: Create Release
-    needs: build
+    needs: [build-macos, build-linux, build-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write

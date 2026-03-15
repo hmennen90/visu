@@ -116,16 +116,16 @@ jobs:
               composer install --no-dev --no-interaction --ignore-platform-reqs
               bin/spc doctor --auto-fix
 
-              # Symlink Alpine musl X11 libs into buildroot
+              # Copy Alpine musl X11 headers/libs into buildroot (not symlink — volume mounts break symlinks)
               mkdir -p buildroot/include buildroot/lib buildroot/lib/pkgconfig
               for dir in X11 GL; do
-                [ -d "/usr/include/$dir" ] && ln -sf "/usr/include/$dir" buildroot/include/$dir
+                [ -d "/usr/include/$dir" ] && cp -r "/usr/include/$dir" buildroot/include/
               done
               for lib in /usr/lib/libX11.a /usr/lib/libXrandr.a /usr/lib/libXinerama.a \
                          /usr/lib/libXcursor.a /usr/lib/libXi.a /usr/lib/libXext.a \
                          /usr/lib/libXfixes.a /usr/lib/libXrender.a /usr/lib/libxcb.a \
                          /usr/lib/libXau.a /usr/lib/libXdmcp.a; do
-                [ -f "$lib" ] && ln -sf "$lib" buildroot/lib/$(basename "$lib")
+                [ -f "$lib" ] && cp "$lib" buildroot/lib/
               done
               for pc in /usr/lib/pkgconfig/x11.pc /usr/lib/pkgconfig/xrandr.pc \
                         /usr/lib/pkgconfig/xinerama.pc /usr/lib/pkgconfig/xcursor.pc \

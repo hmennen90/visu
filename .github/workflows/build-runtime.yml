@@ -89,8 +89,15 @@ jobs:
               file flex g++ gcc git jq libgcc libtool libstdc++ \
               linux-headers m4 make pkgconfig re2c wget xz gettext-dev \
               binutils-gold \
-              libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-              mesa-dev
+              libx11-dev libx11-static libxrandr-dev libxinerama-dev libxcursor-dev \
+              libxi-dev libxi-static libxext-static libxcb-dev libxcb-static \
+              libxau-dev libxdmcp-dev mesa-dev \
+              && cd /tmp \
+              && wget -q https://xorg.freedesktop.org/releases/individual/lib/libXrandr-1.5.4.tar.xz \
+              && tar xf libXrandr-1.5.4.tar.xz && cd libXrandr-1.5.4 \
+              && ./configure --enable-static --disable-shared --prefix=/usr >/dev/null 2>&1 \
+              && make -j$(nproc) >/dev/null 2>&1 && make install >/dev/null 2>&1 \
+              && rm -rf /tmp/libXrandr*
 
           RUN curl -#fSL https://dl.static-php.dev/static-php-cli/bulk/php-8.4.4-cli-linux-$(uname -m).tar.gz \
               | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/php

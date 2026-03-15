@@ -138,7 +138,11 @@ jobs:
 
               bin/spc download --with-php=${{ inputs.php_version }} \
                 --for-extensions=glfw,mbstring,zip,phar --prefer-pre-built
-              bin/spc build glfw,mbstring,zip,phar --build-micro --debug
+              bin/spc build glfw,mbstring,zip,phar --build-micro --debug || {
+                echo "=== spc.shell.log ===" && cat log/spc.shell.log 2>/dev/null | tail -100
+                echo "=== spc.output.log ===" && cat log/spc.output.log 2>/dev/null | tail -100
+                exit 1
+              }
             '
 
       - name: Upload micro.sfx

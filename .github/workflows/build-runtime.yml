@@ -38,7 +38,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: hmennen90/static-php-cli
-          ref: visu-patches
+          ref: main
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2

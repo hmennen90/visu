@@ -159,54 +159,10 @@ jobs:
           path: buildroot/bin/micro.sfx
           retention-days: 90
 
-  # ── Windows build ──
-  build-windows:
-    name: micro.sfx / windows-x86_64 / PHP ${{ inputs.php_version }}
-    runs-on: windows-latest
-    steps:
-      - name: Checkout static-php-cli (fork)
-        uses: actions/checkout@v4
-        with:
-          repository: hmennen90/static-php-cli
-          ref: main
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-          extensions: dom, curl, mbstring, xml, tokenizer
-          tools: composer
-
-      - name: Install dependencies
-        run: composer install --no-dev --no-interaction --ignore-platform-reqs
-
-      - name: Download sources
-        shell: powershell
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          php bin/spc download `
-            --with-php=${{ inputs.php_version }} `
-            --for-extensions=glfw,mbstring,zip,phar `
-            --prefer-pre-built
-
-      - name: Build micro.sfx
-        shell: powershell
-        run: |
-          php bin/spc doctor --auto-fix
-          php bin/spc build glfw,mbstring,zip,phar --build-micro --debug
-
-      - name: Upload micro.sfx
-        uses: actions/upload-artifact@v4
-        with:
-          name: micro-windows-x86_64
-          path: buildroot/bin/micro.sfx
-          retention-days: 90
-
   # ── Release ──
   release:
     name: Create Release
-    needs: [build-macos, build-linux, build-windows]
+    needs: [build-macos, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -246,7 +202,6 @@ jobs:
             | macOS | arm64 (Apple Silicon) | `micro-macos-arm64.sfx` |
             | Linux | x86_64 | `micro-linux-x86_64.sfx` |
             | Linux | arm64 | `micro-linux-arm64.sfx` |
-            | Windows | x86_64 | `micro-windows-x86_64.sfx` |
 
             ### Usage
 

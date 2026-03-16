@@ -136,16 +136,25 @@ XML;
             if (!is_dir($src)) continue;
 
             $dst = $targetDir . '/' . $resourcePath;
-            if (!is_dir($dst)) {
-                mkdir($dst, 0755, true);
-            }
+            $this->copyDirectory($src, $dst);
+        }
+    }
 
-            $cmd = sprintf(
-                'rsync -a %s %s',
-                escapeshellarg($src . '/'),
-                escapeshellarg($dst . '/')
-            );
-            exec($cmd);
+    private function copyDirectory(string $src, string $dst): void
+    {
+        @mkdir($dst, 0755, true);
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($src, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::SELF_FIRST
+        );
+        foreach ($iterator as $item) {
+            $target = $dst . '/' . substr($item->getPathname(), strlen($src) + 1);
+            if ($item->isDir()) {
+                @mkdir($target, 0755, true);
+            } else {
+                @mkdir(dirname($target), 0755, true);
+                copy($item->getPathname(), $target);
+            }
         }
     }
 }

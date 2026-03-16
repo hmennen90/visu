@@ -8,12 +8,13 @@ use VISU\Build\StaticPhpResolver;
 
 class BuildCommand extends Command
 {
-    protected ?string $descriptionShort = 'Build a distributable game package (macOS .app, Linux)';
+    protected ?string $descriptionShort = 'Build a distributable game package (macOS .app, Linux, Windows)';
 
     private const TARGETS = [
-        'macos-arm64'   => ['platform' => 'macos',  'arch' => 'arm64'],
-        'linux-x86_64'  => ['platform' => 'linux',  'arch' => 'x86_64'],
-        'linux-arm64'   => ['platform' => 'linux',  'arch' => 'arm64'],
+        'macos-arm64'     => ['platform' => 'macos',   'arch' => 'arm64'],
+        'linux-x86_64'    => ['platform' => 'linux',   'arch' => 'x86_64'],
+        'linux-arm64'     => ['platform' => 'linux',   'arch' => 'arm64'],
+        'windows-x86_64'  => ['platform' => 'windows', 'arch' => 'x86_64'],
     ];
 
     /**
@@ -21,7 +22,7 @@ class BuildCommand extends Command
      */
     protected $expectedArguments = [
         'platform' => [
-            'description' => 'Target: macos-arm64, linux-x86_64, linux-arm64, macos, linux, all (default: auto-detect)',
+            'description' => 'Target: macos-arm64, linux-x86_64, linux-arm64, windows-x86_64, macos, linux, windows, all (default: auto-detect)',
             'defaultValue' => '',
         ],
         'dry-run' => [
@@ -158,7 +159,7 @@ class BuildCommand extends Command
 
         throw new \RuntimeException(
             "Unknown target: {$platformArg}\n" .
-            "Available: " . implode(', ', array_keys(self::TARGETS)) . ", macos, linux, all"
+            "Available: " . implode(', ', array_keys(self::TARGETS)) . ", macos, linux, windows, all"
         );
     }
 

@@ -42,7 +42,7 @@ class GameBuilder
         // Clean previous build output
         if (is_dir($platformOutputDir)) {
             $this->log('info', 'Cleaning previous build...');
-            exec('rm -rf ' . escapeshellarg($platformOutputDir));
+            $this->removeDirectory($platformOutputDir);
         }
         mkdir($platformOutputDir, 0755, true);
 
@@ -96,7 +96,7 @@ class GameBuilder
         } finally {
             // Cleanup temp dir
             if (is_dir($tempDir)) {
-                exec('rm -rf ' . escapeshellarg($tempDir));
+                $this->removeDirectory($tempDir);
             }
 
             // Restore dev dependencies
@@ -132,16 +132,22 @@ class GameBuilder
 
     private function combineExecutable(string $sfxPath, string $pharPath, string $outputPath): void
     {
-        // cat micro.sfx game.phar > binary
-        $cmd = sprintf(
-            'cat %s %s > %s',
-            escapeshellarg($sfxPath),
-            escapeshellarg($pharPath),
-            escapeshellarg($outputPath)
-        );
-        exec($cmd, $output, $returnCode);
-        if ($returnCode !== 0) {
-            throw new \RuntimeException("Failed to combine executable: " . implode("\n", $output));
+        // Concatenate micro.sfx + game.phar into a single executable
+        $out = fopen($outputPath, 'wb');
+        if ($out === false) {
+            throw new \RuntimeException("Failed to open output file: {$outputPath}");
+        }
+        try {
+            foreach ([$sfxPath, $pharPath] as $inputFile) {
+                $in = fopen($inputFile, 'rb');
+                if ($in === false) {
+                    throw new \RuntimeException("Failed to open input file: {$inputFile}");
+                }
+                stream_copy_to_stream($in, $out);
+                fclose($in);
+            }
+        } finally {
+            fclose($out);
         }
         chmod($outputPath, 0755);
     }
@@ -173,6 +179,18 @@ class GameBuilder
             $size += $file->getSize();
         }
         return $size;
+    }
+
+    private function removeDirectory(string $dir): void
+    {
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($iterator as $item) {
+            $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
+        }
+        rmdir($dir);
     }
 
     private function log(string $level, string $message): void

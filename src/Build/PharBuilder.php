@@ -28,27 +28,11 @@ class PharBuilder
 
         $projectRoot = $this->config->projectRoot;
 
-        // Stage vendor/ with symlink resolution
+        // Stage vendor/ with symlink resolution and exclude filtering
         $vendorSrc = $projectRoot . '/vendor';
         $vendorDst = $stagingDir . '/vendor';
         if (is_dir($vendorSrc)) {
-            $excludeArgs = '';
-            foreach ($this->config->pharExclude as $pattern) {
-                // Convert glob patterns to rsync excludes
-                $exclude = str_replace('**/', '', $pattern);
-                $excludeArgs .= ' --exclude=' . escapeshellarg($exclude);
-            }
-
-            $cmd = sprintf(
-                'rsync -aL --delete %s %s %s',
-                escapeshellarg($vendorSrc . '/'),
-                escapeshellarg($vendorDst . '/'),
-                $excludeArgs
-            );
-            exec($cmd, $output, $returnCode);
-            if ($returnCode !== 0) {
-                throw new \RuntimeException("Failed to stage vendor directory: " . implode("\n", $output));
-            }
+            $this->copyDirectoryFiltered($vendorSrc, $vendorDst, $this->config->pharExclude);
         }
 
         // Stage src/
@@ -263,6 +247,48 @@ STUB_START
 
 __HALT_COMPILER();
 STUB_END;
+    }
+
+    /**
+     * Copy directory with symlink resolution and glob-based exclude filtering.
+     *
+     * @param list<string> $excludePatterns Glob patterns (e.g. "tests", "docs")
+     */
+    private function copyDirectoryFiltered(string $src, string $dst, array $excludePatterns): void
+    {
+        @mkdir($dst, 0755, true);
+        // Normalize exclude patterns: strip leading **/ for simple basename matching
+        $excludes = array_map(fn(string $p) => str_replace('**/', '', $p), $excludePatterns);
+
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($src, FilesystemIterator::SKIP_DOTS | FilesystemIterator::FOLLOW_SYMLINKS),
+            RecursiveIteratorIterator::SELF_FIRST
+        );
+
+        $srcLen = strlen($src);
+        foreach ($iterator as $item) {
+            $relPath = substr($item->getPathname(), $srcLen + 1);
+
+            // Check if any path segment matches an exclude pattern
+            $skip = false;
+            foreach ($excludes as $exclude) {
+                if (fnmatch($exclude, $relPath) || fnmatch('*/' . $exclude, $relPath) || fnmatch($exclude, basename($relPath))) {
+                    $skip = true;
+                    break;
+                }
+            }
+            if ($skip) {
+                continue;
+            }
+
+            $target = $dst . '/' . $relPath;
+            if ($item->isDir()) {
+                @mkdir($target, 0755, true);
+            } else {
+                @mkdir(dirname($target), 0755, true);
+                copy($item->getRealPath() ?: $item->getPathname(), $target);
+            }
+        }
     }
 
     private function copyDirectory(string $src, string $dst): void

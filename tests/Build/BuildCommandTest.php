@@ -45,10 +45,11 @@ class BuildCommandTest extends TestCase
         $ref->setAccessible(true);
 
         $targets = $ref->invoke($command, 'all');
-        $this->assertCount(3, $targets);
+        $this->assertCount(4, $targets);
         $this->assertArrayHasKey('macos-arm64', $targets);
         $this->assertArrayHasKey('linux-x86_64', $targets);
         $this->assertArrayHasKey('linux-arm64', $targets);
+        $this->assertArrayHasKey('windows-x86_64', $targets);
     }
 
     public function testResolveTargetsExact(): void

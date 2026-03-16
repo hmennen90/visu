@@ -164,10 +164,54 @@ jobs:
           path: buildroot/bin/micro.sfx
           retention-days: 90
 
+  # ── Windows build ──
+  build-windows:
+    name: micro.sfx / windows-x86_64 / PHP ${{ env.PHP_VERSION }}
+    runs-on: windows-latest
+    steps:
+      - name: Checkout static-php-cli (fork)
+        uses: actions/checkout@v4
+        with:
+          repository: hmennen90/static-php-cli
+          ref: main
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, curl, mbstring, xml, tokenizer
+          tools: composer
+
+      - name: Install dependencies
+        run: composer install --no-dev --no-interaction --ignore-platform-reqs
+
+      - name: Download sources
+        shell: powershell
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          php bin/spc download `
+            --with-php=${{ env.PHP_VERSION }} `
+            --for-extensions=glfw,mbstring,zip,phar `
+            --prefer-pre-built
+
+      - name: Build micro.sfx
+        shell: powershell
+        run: |
+          php bin/spc doctor --auto-fix
+          php bin/spc build glfw,mbstring,zip,phar --build-micro --debug
+
+      - name: Upload micro.sfx
+        uses: actions/upload-artifact@v4
+        with:
+          name: micro-windows-x86_64
+          path: buildroot/bin/micro.sfx
+          retention-days: 90
+
   # ── Upload binaries to release ──
   upload-to-release:
     name: Upload to Release
-    needs: [build-macos, build-linux]
+    needs: [build-macos, build-linux, build-windows]
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
     permissions:

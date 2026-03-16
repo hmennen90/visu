@@ -114,7 +114,8 @@ class StaticPhpResolver
     }
 
     /**
-     * Find the latest GitHub Release matching runtime-* tag
+     * Find the latest GitHub Release that contains micro.sfx assets.
+     * Matches both runtime-* tags and semver v* tags.
      */
     private function findLatestRuntimeRelease(): ?string
     {
@@ -130,8 +131,19 @@ class StaticPhpResolver
         }
 
         foreach ($releases as $release) {
-            if (isset($release['tag_name']) && str_starts_with($release['tag_name'], 'runtime-')) {
-                return $release['url'] ?? null;
+            if (!isset($release['tag_name'], $release['url'])) {
+                continue;
+            }
+            $tag = $release['tag_name'];
+            // Match runtime-* or v* tags that have assets
+            if ((str_starts_with($tag, 'runtime-') || str_starts_with($tag, 'v'))
+                && !empty($release['assets'])) {
+                // Check if any asset is a micro.sfx file
+                foreach ($release['assets'] as $asset) {
+                    if (str_contains($asset['name'] ?? '', 'micro-')) {
+                        return $release['url'];
+                    }
+                }
             }
         }
 

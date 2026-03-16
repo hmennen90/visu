@@ -8,14 +8,20 @@ use VISU\Build\StaticPhpResolver;
 
 class BuildCommand extends Command
 {
-    protected ?string $descriptionShort = 'Build a distributable game package (macOS .app, Windows, Linux)';
+    protected ?string $descriptionShort = 'Build a distributable game package (macOS .app, Linux)';
+
+    private const TARGETS = [
+        'macos-arm64'   => ['platform' => 'macos',  'arch' => 'arm64'],
+        'linux-x86_64'  => ['platform' => 'linux',  'arch' => 'x86_64'],
+        'linux-arm64'   => ['platform' => 'linux',  'arch' => 'arm64'],
+    ];
 
     /**
      * @var array<string, array<string, mixed>>
      */
     protected $expectedArguments = [
         'platform' => [
-            'description' => 'Target platform: macos, windows, linux (default: auto-detect)',
+            'description' => 'Target: macos-arm64, linux-x86_64, linux-arm64, macos, linux, all (default: auto-detect)',
             'defaultValue' => '',
         ],
         'dry-run' => [
@@ -41,40 +47,24 @@ class BuildCommand extends Command
         $projectRoot = VISU_PATH_ROOT;
         $config = BuildConfig::load($projectRoot);
 
-        // Resolve platform
-        $platformArg = (string) $this->cli->arguments->get('platform');
-        $platform = $platformArg !== '' ? $platformArg : StaticPhpResolver::detectPlatform();
-        $arch = StaticPhpResolver::detectArch();
-
-        // Output directory
         $outputArg = (string) $this->cli->arguments->get('output');
         $outputDir = $outputArg !== '' ? $outputArg : $projectRoot . '/build';
 
-        // micro.sfx path
         $microSfxArg = (string) $this->cli->arguments->get('micro-sfx');
         $microSfxPath = $microSfxArg !== '' ? $microSfxArg : null;
 
-        // Dry-run: show config and exit
+        $targets = $this->resolveTargets((string) $this->cli->arguments->get('platform'));
+
         if ($this->cli->arguments->defined('dry-run')) {
-            $this->dryRun($config, $platform, $arch, $outputDir, $microSfxPath);
+            $this->dryRun($config, $targets, $outputDir, $microSfxPath);
             return;
         }
 
-        // Check phar.readonly
         if (ini_get('phar.readonly')) {
             $this->cli->out('<red>Error:</red> phar.readonly is enabled. Run with:');
-            $this->cli->out('  php -d phar.readonly=0 vendor/bin/visu build ' . $platform);
+            $this->cli->out('  php -d phar.readonly=0 vendor/bin/visu build');
             return;
         }
-
-        $this->cli->out('');
-        $this->cli->out('<bold>VISU Game Builder</bold>');
-        $this->cli->out(str_repeat('-', 50));
-        $this->cli->out("  Game:     {$config->name} v{$config->version}");
-        $this->cli->out("  Platform: {$platform}-{$arch}");
-        $this->cli->out("  Output:   {$outputDir}");
-        $this->cli->out(str_repeat('-', 50));
-        $this->cli->out('');
 
         $builder = new GameBuilder($config);
         $builder->setLogger(function (string $level, string $message): void {
@@ -85,37 +75,106 @@ class BuildCommand extends Command
             };
         });
 
-        try {
-            $result = $builder->build($platform, $outputDir, $microSfxPath);
+        $results = [];
+        foreach ($targets as $targetName => $target) {
+            $this->cli->out('');
+            $this->cli->out('<bold>VISU Game Builder</bold>');
+            $this->cli->out(str_repeat('-', 50));
+            $this->cli->out("  Game:     {$config->name} v{$config->version}");
+            $this->cli->out("  Target:   {$targetName}");
+            $this->cli->out("  Output:   {$outputDir}");
+            $this->cli->out(str_repeat('-', 50));
+            $this->cli->out('');
 
-            $this->cli->out('');
-            $this->cli->out(str_repeat('=', 50));
-            $this->success('Build complete!');
-            $this->cli->out(sprintf('  PHAR:   %.2f MB', $result['pharSize'] / 1024 / 1024));
-            $this->cli->out(sprintf('  Binary: %.2f MB', $result['binarySize'] / 1024 / 1024));
-            $this->cli->out(sprintf('  Total:  %.2f MB', $result['bundleSize'] / 1024 / 1024));
-            $this->cli->out('  Output: ' . $result['outputPath']);
-            $this->cli->out(str_repeat('=', 50));
-        } catch (\Throwable $e) {
-            $this->cli->out('');
-            $this->cli->out('<red>Build failed:</red> ' . $e->getMessage());
-            if ($this->verbose) {
-                $this->cli->out($e->getTraceAsString());
+            try {
+                $result = $builder->build(
+                    $target['platform'],
+                    $outputDir,
+                    $microSfxPath,
+                    $target['arch'],
+                );
+                $results[$targetName] = $result;
+
+                $this->cli->out('');
+                $this->success("{$targetName} complete!");
+                $this->cli->out(sprintf('  PHAR:   %.2f MB', $result['pharSize'] / 1024 / 1024));
+                $this->cli->out(sprintf('  Binary: %.2f MB', $result['binarySize'] / 1024 / 1024));
+                $this->cli->out(sprintf('  Total:  %.2f MB', $result['bundleSize'] / 1024 / 1024));
+                $this->cli->out('  Output: ' . $result['outputPath']);
+            } catch (\Throwable $e) {
+                $this->cli->out('');
+                $this->cli->out("<red>{$targetName} failed:</red> " . $e->getMessage());
+                if ($this->verbose) {
+                    $this->cli->out($e->getTraceAsString());
+                }
             }
+        }
+
+        if (count($results) > 0) {
+            $this->cli->out('');
+            $this->cli->out(str_repeat('=', 50));
+            $this->success(sprintf('Built %d/%d targets', count($results), count($targets)));
+            foreach ($results as $name => $r) {
+                $this->cli->out(sprintf('  %-20s %.2f MB  %s', $name, $r['bundleSize'] / 1024 / 1024, $r['outputPath']));
+            }
+            $this->cli->out(str_repeat('=', 50));
         }
     }
 
-    private function dryRun(BuildConfig $config, string $platform, string $arch, string $outputDir, ?string $microSfxPath): void
+    /**
+     * Resolve platform argument to list of build targets.
+     *
+     * @return array<string, array{platform: string, arch: string}>
+     */
+    private function resolveTargets(string $platformArg): array
+    {
+        if ($platformArg === '' || $platformArg === 'auto') {
+            $platform = StaticPhpResolver::detectPlatform();
+            $arch = StaticPhpResolver::detectArch();
+            $key = "{$platform}-{$arch}";
+            return [$key => ['platform' => $platform, 'arch' => $arch]];
+        }
+
+        if ($platformArg === 'all') {
+            return self::TARGETS;
+        }
+
+        // Exact target match: macos-arm64, linux-x86_64, etc.
+        if (isset(self::TARGETS[$platformArg])) {
+            return [$platformArg => self::TARGETS[$platformArg]];
+        }
+
+        // Platform-only match: "macos" → all macos targets, "linux" → all linux targets
+        $matched = [];
+        foreach (self::TARGETS as $name => $target) {
+            if ($target['platform'] === $platformArg) {
+                $matched[$name] = $target;
+            }
+        }
+
+        if (!empty($matched)) {
+            return $matched;
+        }
+
+        throw new \RuntimeException(
+            "Unknown target: {$platformArg}\n" .
+            "Available: " . implode(', ', array_keys(self::TARGETS)) . ", macos, linux, all"
+        );
+    }
+
+    /**
+     * @param array<string, array{platform: string, arch: string}> $targets
+     */
+    private function dryRun(BuildConfig $config, array $targets, string $outputDir, ?string $microSfxPath): void
     {
         $this->cli->out('');
         $this->cli->out('<bold>VISU Build — Dry Run</bold>');
         $this->cli->out(str_repeat('-', 50));
 
         $data = $config->toArray();
-        $data['target.platform'] = $platform;
-        $data['target.arch'] = $arch;
         $data['output'] = $outputDir;
         $data['micro-sfx'] = $microSfxPath ?? '(auto-resolve)';
+        $data['targets'] = implode(', ', array_keys($targets));
 
         foreach ($data as $key => $value) {
             if (is_array($value)) {
@@ -125,14 +184,15 @@ class BuildCommand extends Command
             }
         }
 
-        // Check micro.sfx availability
         $this->cli->out('');
         $resolver = new StaticPhpResolver();
-        try {
-            $sfxPath = $resolver->resolve($microSfxPath, $platform, $arch);
-            $this->success("micro.sfx found: {$sfxPath}");
-        } catch (\RuntimeException $e) {
-            $this->cli->out('<yellow>Warning:</yellow> ' . explode("\n", $e->getMessage())[0]);
+        foreach ($targets as $name => $target) {
+            try {
+                $sfxPath = $resolver->resolve($microSfxPath, $target['platform'], $target['arch']);
+                $this->success("{$name}: micro.sfx found at {$sfxPath}");
+            } catch (\RuntimeException $e) {
+                $this->cli->out("<yellow>{$name}:</yellow> " . explode("\n", $e->getMessage())[0]);
+            }
         }
 
         $this->cli->out(str_repeat('-', 50));

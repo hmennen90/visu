@@ -34,9 +34,9 @@ class GameBuilder
      *
      * @return array{outputPath: string, pharSize: int, binarySize: int, bundleSize: int}
      */
-    public function build(string $platform, string $outputDir, ?string $microSfxPath = null): array
+    public function build(string $platform, string $outputDir, ?string $microSfxPath = null, ?string $arch = null): array
     {
-        $arch = StaticPhpResolver::detectArch();
+        $arch = $arch ?? StaticPhpResolver::detectArch();
         $platformOutputDir = $outputDir . '/' . $platform . '-' . $arch;
 
         // Clean previous build output

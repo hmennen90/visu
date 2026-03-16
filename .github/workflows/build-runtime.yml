@@ -20,7 +20,7 @@ env:
 jobs:
   # ── macOS build (native) ──
   build-macos:
-    name: micro.sfx / macos-arm64 / PHP ${{ env.PHP_VERSION }}
+    name: micro.sfx / macos-arm64 / PHP ${{ inputs.php_version || '8.4' }}
     runs-on: macos-14
     steps:
       - name: Checkout static-php-cli (fork)
@@ -64,7 +64,7 @@ jobs:
 
   # ── Linux builds (Alpine Docker for musl-compatible X11) ──
   build-linux:
-    name: micro.sfx / linux-${{ matrix.arch }} / PHP ${{ env.PHP_VERSION }}
+    name: micro.sfx / linux-${{ matrix.arch }} / PHP ${{ inputs.php_version || '8.4' }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -166,7 +166,7 @@ jobs:
 
   # ── Windows build ──
   build-windows:
-    name: micro.sfx / windows-x86_64 / PHP ${{ env.PHP_VERSION }}
+    name: micro.sfx / windows-x86_64 / PHP ${{ inputs.php_version || '8.4' }}
     runs-on: windows-latest
     steps:
       - name: Checkout static-php-cli (fork)

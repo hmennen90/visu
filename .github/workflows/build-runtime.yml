@@ -1,6 +1,8 @@
 name: Build Runtime (micro.sfx)
 
 on:
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       php_version:
@@ -12,10 +14,13 @@ on:
           - '8.4'
           - '8.5'
 
+env:
+  PHP_VERSION: ${{ inputs.php_version || '8.4' }}
+
 jobs:
   # ── macOS build (native) ──
   build-macos:
-    name: micro.sfx / macos-arm64 / PHP ${{ inputs.php_version }}
+    name: micro.sfx / macos-arm64 / PHP ${{ env.PHP_VERSION }}
     runs-on: macos-14
     steps:
       - name: Checkout static-php-cli (fork)
@@ -41,7 +46,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           php bin/spc download \
-            --with-php=${{ inputs.php_version }} \
+            --with-php=${{ env.PHP_VERSION }} \
             --for-extensions=glfw,mbstring,zip,phar \
             --prefer-pre-built
 
@@ -59,7 +64,7 @@ jobs:
 
   # ── Linux builds (Alpine Docker for musl-compatible X11) ──
   build-linux:
-    name: micro.sfx / linux-${{ matrix.arch }} / PHP ${{ inputs.php_version }}
+    name: micro.sfx / linux-${{ matrix.arch }} / PHP ${{ env.PHP_VERSION }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -143,7 +148,7 @@ jobs:
                 [ -f "$pc" ] && cp "$pc" buildroot/lib/pkgconfig/
               done
 
-              bin/spc download --with-php=${{ inputs.php_version }} \
+              bin/spc download --with-php=${{ env.PHP_VERSION }} \
                 --for-extensions=glfw,mbstring,zip,phar --prefer-pre-built
               bin/spc build glfw,mbstring,zip,phar --build-micro --debug || {
                 echo "=== spc.shell.log ===" && cat log/spc.shell.log 2>/dev/null | tail -100
@@ -159,10 +164,11 @@ jobs:
           path: buildroot/bin/micro.sfx
           retention-days: 90
 
-  # ── Release ──
-  release:
-    name: Create Release
+  # ── Upload binaries to release ──
+  upload-to-release:
+    name: Upload to Release
     needs: [build-macos, build-linux]
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -182,31 +188,11 @@ jobs:
           done
           ls -lh release/
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: runtime-php${{ inputs.php_version }}
-          name: "VISU Runtime — PHP ${{ inputs.php_version }}"
-          body: |
-            ## VISU Runtime Binaries
-
-            Static PHP micro.sfx binaries for VISU game distribution.
-
-            **PHP Version:** ${{ inputs.php_version }}
-            **Extensions:** glfw, mbstring, zip, phar
-
-            ### Downloads
-
-            | Platform | Architecture | File |
-            |----------|-------------|------|
-            | macOS | arm64 (Apple Silicon) | `micro-macos-arm64.sfx` |
-            | Linux | x86_64 | `micro-linux-x86_64.sfx` |
-            | Linux | arm64 | `micro-linux-arm64.sfx` |
-
-            ### Usage
-
-            These binaries are automatically downloaded by `visu build`.
-            Manual: `cat micro-<platform>-<arch>.sfx game.phar > MyGame && chmod +x MyGame`
-          files: release/*
-          draft: false
-          prerelease: false
+      - name: Upload to existing release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for file in release/*.sfx; do
+            echo "Uploading $(basename $file)..."
+            gh release upload "${{ github.event.release.tag_name }}" "$file" --repo "${{ github.repository }}" --clobber
+          done

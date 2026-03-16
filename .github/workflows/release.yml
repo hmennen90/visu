@@ -2,216 +2,37 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [master]
 
 jobs:
-  # ── Build micro.sfx for all platforms ──
-
-  build-macos:
-    name: micro.sfx / macos-arm64
-    runs-on: macos-14
-    steps:
-      - name: Checkout static-php-cli (fork)
-        uses: actions/checkout@v4
-        with:
-          repository: hmennen90/static-php-cli
-          ref: main
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-          extensions: dom, curl, mbstring, xml, tokenizer
-          tools: composer
-
-      - name: Install dependencies
-        run: |
-          composer install --no-dev --no-interaction --ignore-platform-reqs
-          brew install cmake pkg-config
-
-      - name: Download sources
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          php bin/spc download \
-            --with-php=8.4 \
-            --for-extensions=glfw,mbstring,zip,phar \
-            --prefer-pre-built
-
-      - name: Build micro.sfx
-        run: |
-          php bin/spc doctor --auto-fix
-          php bin/spc build glfw,mbstring,zip,phar --build-micro
-
-      - name: Upload micro.sfx
-        uses: actions/upload-artifact@v4
-        with:
-          name: micro-macos-arm64
-          path: buildroot/bin/micro.sfx
-          retention-days: 7
-
-  build-linux:
-    name: micro.sfx / linux-${{ matrix.arch }}
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x86_64
-            runner: ubuntu-latest
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-
-    steps:
-      - name: Checkout static-php-cli (fork)
-        uses: actions/checkout@v4
-        with:
-          repository: hmennen90/static-php-cli
-          ref: main
-
-      - name: Build micro.sfx in Alpine container
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          docker build -t spc-glfw -f- . << 'DOCKERFILE'
-          FROM alpine:3.21
-
-          RUN apk update && apk upgrade -a && apk add --no-cache \
-              autoconf automake bash binutils bison build-base cmake curl \
-              file flex g++ gcc git jq libgcc libtool libstdc++ \
-              linux-headers m4 make pkgconfig re2c wget xz gettext-dev \
-              binutils-gold \
-              libx11-dev libx11-static libxrandr-dev libxinerama-dev libxcursor-dev \
-              libxi-dev libxi-static libxext-static libxcb-dev libxcb-static \
-              libxau-dev libxdmcp-dev mesa-dev \
-              && cd /tmp \
-              && wget -q https://xorg.freedesktop.org/releases/individual/lib/libXrandr-1.5.4.tar.xz \
-              && tar xf libXrandr-1.5.4.tar.xz && cd libXrandr-1.5.4 \
-              && ./configure --enable-static --disable-shared --prefix=/usr >/dev/null 2>&1 \
-              && make -j$(nproc) >/dev/null 2>&1 && make install >/dev/null 2>&1 \
-              && rm -rf /tmp/libXrandr*
-
-          RUN curl -#fSL https://dl.static-php.dev/static-php-cli/bulk/php-8.4.4-cli-linux-$(uname -m).tar.gz \
-              | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/php
-          RUN curl -#fSL https://getcomposer.org/download/latest-stable/composer.phar \
-              -o /usr/local/bin/composer && chmod +x /usr/local/bin/composer
-
-          WORKDIR /app
-          DOCKERFILE
-
-          docker run --rm \
-            -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
-            -v "$(pwd)/config:/app/config" \
-            -v "$(pwd)/src:/app/src" \
-            -v "$(pwd)/bin:/app/bin" \
-            -v "$(pwd)/composer.json:/app/composer.json" \
-            -v "$(pwd)/composer.lock:/app/composer.lock" \
-            -v "$(pwd)/buildroot:/app/buildroot" \
-            -v "$(pwd)/source:/app/source" \
-            -v "$(pwd)/downloads:/app/downloads" \
-            -v "$(pwd)/pkgroot:/app/pkgroot" \
-            -v "$(pwd)/log:/app/log" \
-            spc-glfw bash -c '
-              composer install --no-dev --no-interaction --ignore-platform-reqs
-              bin/spc doctor --auto-fix
-
-              mkdir -p buildroot/include buildroot/lib buildroot/lib/pkgconfig
-              for dir in X11 GL; do
-                [ -d "/usr/include/$dir" ] && cp -r "/usr/include/$dir" buildroot/include/
-              done
-              for lib in /usr/lib/libX11.a /usr/lib/libXrandr.a /usr/lib/libXinerama.a \
-                         /usr/lib/libXcursor.a /usr/lib/libXi.a /usr/lib/libXext.a \
-                         /usr/lib/libXfixes.a /usr/lib/libXrender.a /usr/lib/libxcb.a \
-                         /usr/lib/libXau.a /usr/lib/libXdmcp.a; do
-                [ -f "$lib" ] && cp "$lib" buildroot/lib/
-              done
-              for pc in /usr/lib/pkgconfig/x11.pc /usr/lib/pkgconfig/xrandr.pc \
-                        /usr/lib/pkgconfig/xinerama.pc /usr/lib/pkgconfig/xcursor.pc \
-                        /usr/lib/pkgconfig/xi.pc /usr/lib/pkgconfig/xext.pc \
-                        /usr/lib/pkgconfig/xfixes.pc /usr/lib/pkgconfig/xrender.pc \
-                        /usr/lib/pkgconfig/xcb.pc /usr/lib/pkgconfig/xau.pc \
-                        /usr/lib/pkgconfig/xdmcp.pc; do
-                [ -f "$pc" ] && cp "$pc" buildroot/lib/pkgconfig/
-              done
-
-              bin/spc download --with-php=8.4 \
-                --for-extensions=glfw,mbstring,zip,phar --prefer-pre-built
-              bin/spc build glfw,mbstring,zip,phar --build-micro
-            '
-
-      - name: Upload micro.sfx
-        uses: actions/upload-artifact@v4
-        with:
-          name: micro-linux-${{ matrix.arch }}
-          path: buildroot/bin/micro.sfx
-          retention-days: 7
-
-  # ── Create GitHub Release with all binaries ──
-
-  release:
-    name: Publish Release
-    needs: [build-macos, build-linux]
+  semantic-release:
+    name: Semantic Release
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      new_release: ${{ steps.release.outputs.new_release_published }}
+      version: ${{ steps.release.outputs.new_release_version }}
 
     steps:
-      - name: Checkout VISU
+      - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Download all micro.sfx artifacts
-        uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Prepare release assets
-        run: |
-          mkdir release
-          for dir in artifacts/micro-*/; do
-            platform=$(basename "$dir")
-            cp "$dir/micro.sfx" "release/${platform}.sfx"
-          done
-          ls -lh release/
-
-      - name: Generate changelog
-        id: changelog
-        run: |
-          # Get previous tag
-          PREV_TAG=$(git tag --sort=-creatordate | head -2 | tail -1)
-          TAG=${{ github.ref_name }}
-
-          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$TAG" ]; then
-            CHANGES=$(git log --pretty=format:"- %s" "$PREV_TAG".."$TAG" -- . ':!.github')
-          else
-            CHANGES="Initial release"
-          fi
-
-          # Write to file (multiline output)
-          echo "$CHANGES" > /tmp/changelog.txt
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          tag_name: ${{ github.ref_name }}
-          name: "VISU ${{ github.ref_name }}"
-          body: |
-            ## What's Changed
+          node-version: 22
 
-            $(cat /tmp/changelog.txt)
+      - name: Install semantic-release
+        run: npm install -g semantic-release @semantic-release/commit-analyzer @semantic-release/release-notes-generator @semantic-release/github
 
-            ## Runtime Binaries (micro.sfx)
-
-            Pre-built static PHP binaries for `visu build`. These are automatically
-            downloaded when you run `visu build <target>`.
-
-            | Platform | Architecture | File |
-            |----------|-------------|------|
-            | macOS | arm64 (Apple Silicon) | `micro-macos-arm64.sfx` |
-            | Linux | x86_64 | `micro-linux-x86_64.sfx` |
-            | Linux | arm64 | `micro-linux-arm64.sfx` |
-
-            **PHP 8.4** with extensions: glfw, mbstring, zip, phar
-          files: release/*
-          draft: false
-          prerelease: false
+      - name: Run semantic-release
+        id: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release

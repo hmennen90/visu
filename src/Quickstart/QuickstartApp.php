@@ -205,7 +205,7 @@ class QuickstartApp implements GameLoopDelegate
         $this->entities = new EntityRegistry();
 
         // create the vector graphics context
-        $this->vg = new VGContext(VGContext::ANTIALIAS);
+        $this->vg = new VGContext(VGContext::ANTIALIAS | VGContext::STENCIL_STROKES);
         // rest GL state after creating the VG context as it might change some state
         $this->gl->reset();
 
@@ -361,10 +361,9 @@ class QuickstartApp implements GameLoopDelegate
             function(PipelineContainer $data, PipelineResources $resources) use($context) 
             {
                 $quickstartPassData = $data->get(QuickstartPassData::class);
-
                 $renderTarget = $resources->getRenderTarget($quickstartPassData->renderTarget);
                 $renderTarget->preparePass();
-                
+
                 // begin the VectorGraphics frame
                 $this->vg->beginFrame($renderTarget->effectiveWidth(), $renderTarget->effectiveHeight(), $renderTarget->contentScaleX);
 
@@ -373,7 +372,7 @@ class QuickstartApp implements GameLoopDelegate
 
                 // end the FlyUI frame
                 FlyUI::endFrame();
-                
+
                 // end the VectorGraphics frame
                 $this->vg->endFrame();
                 // because VG touches the GL state we need to reset it

@@ -834,6 +834,14 @@ class Input implements WindowEventHandlerInterface, InputInterface
     }
 
     /**
+     * Returns true while input events are being suppressed (e.g. during fullscreen toggle).
+     */
+    public function isInputSuppressed(): bool
+    {
+        return $this->suppressInputEventsFrames > 0 || microtime(true) < $this->suppressInputUntil;
+    }
+
+    /**
      * Suppress all input events for the given number of frames.
      * Useful after display mode changes (fullscreen/windowed toggle) where
      * GLFW may generate spurious callbacks on macOS.

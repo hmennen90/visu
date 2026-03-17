@@ -153,6 +153,14 @@ class Input implements WindowEventHandlerInterface, InputInterface
      */
     private float $suppressInputUntil = 0.0;
 
+    /**
+     * Post-suppression guard: after suppression ends, macOS may still deliver
+     * phantom PRESS events. We block PRESS events for a short window after
+     * suppression ends. This prevents phantom presses from corrupting state.
+     * Auto-expires after a few frames so real user clicks are never permanently blocked.
+     */
+    private int $postSuppressionGuardFrames = 0;
+
 
     /**
      * The event names the input class will dispatch on
@@ -642,6 +650,20 @@ class Input implements WindowEventHandlerInterface, InputInterface
             return;
         }
 
+        // Post-suppression guard: block phantom PRESS for a short window after
+        // suppression ends. macOS delivers phantom PRESS events after fullscreen
+        // toggle. A RELEASE during the guard window immediately disables it,
+        // so the user's next real click works on first try.
+        if ($this->postSuppressionGuardFrames > 0) {
+            if ($action === GLFW_PRESS) {
+                return;
+            }
+            if ($action === GLFW_RELEASE) {
+                // Real or phantom RELEASE — clear guard immediately so next click works
+                $this->postSuppressionGuardFrames = 0;
+            }
+        }
+
         // track current button state from callbacks
         $this->mouseButtonStates[$button] = $action;
 
@@ -784,8 +806,30 @@ class Input implements WindowEventHandlerInterface, InputInterface
         $this->keysDidPressFrame = [];
         $this->keysDidReleaseFrame = [];
 
+        $wasSuppressed = $this->suppressInputEventsFrames > 0 || microtime(true) < $this->suppressInputUntil;
+
         if ($this->suppressInputEventsFrames > 0) {
             $this->suppressInputEventsFrames--;
+        }
+
+        // When suppression just ended, force all mouse button states to RELEASE
+        // and activate a short post-suppression guard. macOS delivers phantom PRESS
+        // events even after the suppression window closes. The guard blocks PRESS
+        // events for a few frames, then auto-expires so real clicks always work.
+        $isSuppressed = $this->suppressInputEventsFrames > 0 || microtime(true) < $this->suppressInputUntil;
+        if ($wasSuppressed && !$isSuppressed) {
+            $this->mouseButtonStates = [];
+            $this->mouseButtonsDidPress = [];
+            $this->mouseButtonsDidRelease = [];
+            $this->mouseButtonsDidPressFrame = [];
+            $this->mouseButtonsDidReleaseFrame = [];
+            // Block phantom PRESS events for 10 frames (~0.17s at 60fps)
+            $this->postSuppressionGuardFrames = 10;
+        }
+
+        // Decrement post-suppression guard
+        if ($this->postSuppressionGuardFrames > 0) {
+            $this->postSuppressionGuardFrames--;
         }
     }
 
@@ -798,8 +842,12 @@ class Input implements WindowEventHandlerInterface, InputInterface
     {
         $this->suppressInputEventsFrames = $frames;
         $this->suppressInputUntil = microtime(true) + $seconds;
-        // Clear any already-recorded events from the current frame,
-        // but keep mouseButtonStates/keyStates intact to avoid false releases
+        // Clear all recorded events AND reset mouse button states to released.
+        // Keeping states intact would cause a stuck press if the user was
+        // holding a button when suppression started (the release callback
+        // arrives during suppression and gets dropped, leaving the button
+        // permanently "pressed" from FlyUI's perspective).
+        $this->mouseButtonStates = [];
         $this->mouseButtonsDidPress = [];
         $this->mouseButtonsDidRelease = [];
         $this->mouseButtonsDidPressFrame = [];

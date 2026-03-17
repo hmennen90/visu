@@ -116,7 +116,15 @@ class FUIButton extends FUIView
 
         // Track press state: NONE → STARTED (on press) → fire onClick (on release inside) → NONE
         $pressKey = $this->buttonId . '_ps';
-        $pressState = (int) $ctx->getStaticValue($pressKey, self::BUTTON_PRESS_NONE);
+        $rawPressState = $ctx->getStaticValue($pressKey, self::BUTTON_PRESS_NONE);
+        $pressState = (int) $rawPressState;
+
+        // Defensive: reset corrupt press state (can happen during display mode transitions)
+        if ($pressState !== self::BUTTON_PRESS_NONE && $pressState !== self::BUTTON_PRESS_STARTED) {
+            $pressState = self::BUTTON_PRESS_NONE;
+            $ctx->setStaticValue($pressKey, self::BUTTON_PRESS_NONE);
+        }
+
         $mousePressed = $ctx->input->isMouseButtonPressed(MouseButton::LEFT);
         $mouseReleased = !$mousePressed;
 

@@ -142,38 +142,15 @@ class FUIButton extends FUIView
             $ctx->setStaticValue($pressKey, self::BUTTON_PRESS_NONE);
         }
 
-        // we have a little fade animation of the ring of the button
-        // so basically check if it has been less then 0.2 seconds since the last press
-        if ($ctx->getStaticValue($lpKey, -99.0) + 0.2 > glfwGetTime())
-        {
-            $alpha = (float)(($ctx->getStaticValue($lpKey, 0.0) + 0.2 - glfwGetTime()) * 5.0);
-
-            $ctx->vg->beginPath();
-            $ctx->vg->strokeColor($this->style->backgroundColor->withAlpha($alpha));
-            $ctx->vg->strokeWidth(2);
-            $ringDistance = 2 + (1.0 - $alpha) * 3.0;
-            $ctx->vg->roundedRect(
-                $ctx->origin->x - $ringDistance,
-                $ctx->origin->y - $ringDistance,
-                $ctx->containerSize->x + $ringDistance * 2,
-                $height + $ringDistance * 2,
-                $this->style->cornerRadius
-            );
-            $ctx->vg->stroke();
-        }
-        else {
-            // clean up the last press time
-            $ctx->clearStaticValue($lpKey);
-        }
+        // ring fade animation disabled — causes white line artifacts
+        $ctx->clearStaticValue($lpKey);
 
         // render the button background
         $ctx->vg->beginPath();
         $ctx->vg->fillColor($this->style->backgroundColor);
-
         if ($isInside) {
             $ctx->vg->fillColor($this->style->hoverBackgroundColor);
         }
-
         $ctx->vg->roundedRect(
             $ctx->origin->x,
             $ctx->origin->y,

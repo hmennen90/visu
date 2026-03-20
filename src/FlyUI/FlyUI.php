@@ -308,6 +308,20 @@ class FlyUI
     public bool $performanceTracingEnabled = false;
 
     /**
+     * Viewport offset for letterboxing support.
+     * When set, FlyUI will offset its rendering and mouse hit-testing
+     * by this amount, allowing the game to render in a centered sub-area.
+     */
+    public ?Vec2 $viewportOffset = null;
+
+    /**
+     * Viewport size override for letterboxing support.
+     * When set, FlyUI uses this as the root container size instead of
+     * the full window resolution passed to beginFrame.
+     */
+    public ?Vec2 $viewportSize = null;
+
+    /**
      * Performance tracer instance
      * 
      * This thing that does the tracing...
@@ -422,8 +436,16 @@ class FlyUI
     private function internalEndFrame() : void
     {
         $ctx = new FUIRenderContext($this->vgContext, $this->input, $this->theme);
-        $ctx->containerSize = $this->currentResolution;
+        $ctx->containerSize = $this->viewportSize ?? $this->currentResolution;
         $ctx->contentScale = $this->currentContentScale;
+
+        // Apply viewport offset for letterboxing (shift mouse coordinates)
+        if ($this->viewportOffset !== null) {
+            $ctx->mousePos = new Vec2(
+                $ctx->mousePos->x - $this->viewportOffset->x,
+                $ctx->mousePos->y - $this->viewportOffset->y,
+            );
+        }
 
         // toggle performance tracing overlay on f6 (cross-check with polling
         // to filter phantom key events from macOS fullscreen transitions)
@@ -433,6 +455,11 @@ class FlyUI
         }
 
         $this->vgContext->reset();
+
+        // Apply viewport offset for letterboxing (shift VG rendering)
+        if ($this->viewportOffset !== null) {
+            $this->vgContext->translate($this->viewportOffset->x, $this->viewportOffset->y);
+        }
 
         // set the default font face
         $ctx->ensureRegularFontFace();

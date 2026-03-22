@@ -18,6 +18,9 @@ class BuildConfig
     /** @var array<string> */
     public array $phpExtraLibs = ['-lc++'];
 
+    /** @var array<string, array<array{src: string, optional?: bool}>> Platform-specific native libs to bundle alongside the binary */
+    public array $bundleLibs = [];
+
     /** @var array<string> Glob patterns to exclude from PHAR */
     public array $pharExclude = ['**/tests', '**/Tests', '**/test', '**/docs', '**/doc', '**/editor', '**/.git', '**/.idea', '**/.phpunit*', '**/examples'];
 
@@ -29,6 +32,9 @@ class BuildConfig
 
     /** @var array<string, array<string, mixed>> Platform-specific config */
     public array $platforms = [];
+
+    /** @var array<string, array<string, mixed>> Build type definitions with constant overrides */
+    public array $buildTypes = [];
 
     public string $projectRoot;
 
@@ -84,12 +90,14 @@ class BuildConfig
 
         if (isset($data['php']['extensions'])) $this->phpExtensions = $data['php']['extensions'];
         if (isset($data['php']['extraLibs'])) $this->phpExtraLibs = $data['php']['extraLibs'];
+        if (isset($data['php']['bundleLibs'])) $this->bundleLibs = $data['php']['bundleLibs'];
 
         if (isset($data['phar']['exclude'])) $this->pharExclude = $data['phar']['exclude'];
         if (isset($data['phar']['additionalRequires'])) $this->additionalRequires = $data['phar']['additionalRequires'];
 
         if (isset($data['resources']['external'])) $this->externalResources = $data['resources']['external'];
         if (isset($data['platforms'])) $this->platforms = $data['platforms'];
+        if (isset($data['buildTypes'])) $this->buildTypes = $data['buildTypes'];
     }
 
     /**
@@ -106,10 +114,12 @@ class BuildConfig
             'entry' => $this->entry,
             'php.extensions' => $this->phpExtensions,
             'php.extraLibs' => $this->phpExtraLibs,
+            'php.bundleLibs' => $this->bundleLibs,
             'phar.exclude' => $this->pharExclude,
             'phar.additionalRequires' => $this->additionalRequires,
             'resources.external' => $this->externalResources,
             'platforms' => $this->platforms,
+            'buildTypes' => $this->buildTypes,
         ];
     }
 }

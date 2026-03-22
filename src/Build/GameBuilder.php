@@ -34,10 +34,14 @@ class GameBuilder
      *
      * @return array{outputPath: string, pharSize: int, binarySize: int, bundleSize: int}
      */
-    public function build(string $platform, string $outputDir, ?string $microSfxPath = null, ?string $arch = null): array
+    public function build(string $platform, string $outputDir, ?string $microSfxPath = null, ?string $arch = null, string $variant = 'base', string $buildType = 'full'): array
     {
         $arch = $arch ?? StaticPhpResolver::detectArch();
-        $platformOutputDir = $outputDir . '/' . $platform . '-' . $arch;
+        $suffix = $variant !== 'base' ? "-{$variant}" : '';
+        if ($buildType !== 'full') {
+            $suffix .= "-{$buildType}";
+        }
+        $platformOutputDir = $outputDir . '/' . $platform . '-' . $arch . $suffix;
 
         // Clean previous build output
         if (is_dir($platformOutputDir)) {
@@ -60,6 +64,12 @@ class GameBuilder
             $fileCount = $this->countFiles($stagingDir);
             $this->log('success', "Staged {$fileCount} files");
 
+            // Phase 2b: Apply build type constant overrides
+            if ($buildType !== 'full' && isset($this->config->buildTypes[$buildType]['constants'])) {
+                $this->applyBuildTypeConstants($stagingDir, $this->config->buildTypes[$buildType]['constants']);
+                $this->log('info', "Applied build type '{$buildType}' constants");
+            }
+
             // Phase 3: Create PHAR
             $pharPath = $tempDir . '/' . strtolower($this->config->name) . '.phar';
             $this->log('info', 'Creating PHAR archive...');
@@ -69,7 +79,7 @@ class GameBuilder
 
             // Phase 4: Resolve static PHP binary
             $this->log('info', 'Resolving micro.sfx binary...');
-            $sfxPath = $this->staticPhpResolver->resolve($microSfxPath, $platform, $arch);
+            $sfxPath = $this->staticPhpResolver->resolve($microSfxPath, $platform, $arch, $variant);
             $this->log('success', 'Found micro.sfx: ' . $sfxPath);
 
             // Phase 5: Combine executable
@@ -81,7 +91,7 @@ class GameBuilder
 
             // Phase 6: Package for platform
             $this->log('info', "Packaging for {$platform}...");
-            $outputPath = $this->platformPackager->package($combinedPath, $platformOutputDir, $platform);
+            $outputPath = $this->platformPackager->package($combinedPath, $platformOutputDir, $platform, $variant);
             $this->log('success', 'Output: ' . $outputPath);
 
             // Phase 7: Report
@@ -191,6 +201,29 @@ class GameBuilder
             $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
         }
         rmdir($dir);
+    }
+
+    /**
+     * Patch define() calls in bootstrap_constants.php with build-type overrides.
+     *
+     * @param array<string, mixed> $constants
+     */
+    private function applyBuildTypeConstants(string $stagingDir, array $constants): void
+    {
+        $file = $stagingDir . '/bootstrap_constants.php';
+        if (!file_exists($file)) {
+            return;
+        }
+
+        $content = file_get_contents($file);
+        foreach ($constants as $name => $value) {
+            $phpValue = var_export($value, true);
+            // Match: define('NAME', <anything>) or define("NAME", <anything>)
+            $pattern = "/(define\(\s*['\"]" . preg_quote($name, '/') . "['\"]\s*,\s*).+?(\))/";
+            $replacement = '${1}' . $phpValue . '${2}';
+            $content = preg_replace($pattern, $replacement, $content);
+        }
+        file_put_contents($file, $content);
     }
 
     private function log(string $level, string $message): void

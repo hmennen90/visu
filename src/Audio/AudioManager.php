@@ -2,15 +2,14 @@
 
 namespace VISU\Audio;
 
-use VISU\Audio\Backend\OpenALAudioBackend;
-use VISU\Audio\Backend\SDL3AudioBackend;
-use VISU\SDL3\SDL;
+use VISU\Audio\Backend\PHPGLFWAudioBackend;
 
 class AudioManager
 {
     private AudioBackendInterface $backend;
 
-    private ?Mp3Decoder $mp3Decoder = null;
+    /** @var Mp3Decoder|null */
+    private ?object $mp3Decoder = null;
 
     /**
      * Clip cache (path -> AudioClipData).
@@ -58,28 +57,41 @@ class AudioManager
      * Auto-detect the best available audio backend.
      * Priority: SDL3 (if SDL instance provided) -> OpenAL -> exception.
      */
-    public static function create(?SDL $sdl = null): self
+    public static function create(mixed $sdl = null): self
     {
-        // Try SDL3 first if an SDL instance is available
-        if ($sdl !== null) {
+        // FFI-based backends (SDL3, OpenAL) require the FFI extension.
+        // We use string class names to avoid autoloading classes with FFI typed properties.
+        if (class_exists('FFI', false)) {
+            // Try SDL3 first if an SDL instance is available
+            if ($sdl !== null) {
+                try {
+                    /** @var class-string<AudioBackendInterface> */
+                    $cls = 'VISU\\Audio\\Backend\\SDL3AudioBackend';
+                    return new self(new $cls($sdl));
+                } catch (\Throwable) {
+                    // Fall through to OpenAL
+                }
+            }
+
+            // Try OpenAL
             try {
-                return new self(new SDL3AudioBackend($sdl));
+                /** @var class-string<AudioBackendInterface> */
+                $cls = 'VISU\\Audio\\Backend\\OpenALAudioBackend';
+                if ($cls::isAvailable()) {
+                    return new self(new $cls());
+                }
             } catch (\Throwable) {
-                // Fall through to OpenAL
+                // Fall through to php-glfw
             }
         }
 
-        // Try OpenAL
-        if (OpenALAudioBackend::isAvailable()) {
-            try {
-                return new self(new OpenALAudioBackend());
-            } catch (\Throwable) {
-                // Fall through to error
-            }
+        // Try php-glfw built-in audio (miniaudio)
+        if (PHPGLFWAudioBackend::isAvailable()) {
+            return new self(new PHPGLFWAudioBackend());
         }
 
         throw new \RuntimeException(
-            'No audio backend available. Install SDL3 (brew install sdl3) or OpenAL Soft (brew install openal-soft).'
+            'No audio backend available.'
         );
     }
 
@@ -111,10 +123,18 @@ class AudioManager
         $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
 
         if ($ext === 'mp3') {
-            if ($this->mp3Decoder === null) {
-                $this->mp3Decoder = new Mp3Decoder();
+            // php-glfw backend handles MP3 natively via soundFromDisk(),
+            // so we only need the source path, not decoded PCM data.
+            if ($this->backend instanceof PHPGLFWAudioBackend) {
+                $clip = new AudioClipData('', 44100, 2, 16, $path);
+            } elseif (class_exists('FFI', false)) {
+                if ($this->mp3Decoder === null) {
+                    $this->mp3Decoder = new Mp3Decoder();
+                }
+                $clip = $this->mp3Decoder->decode($path);
+            } else {
+                throw new \RuntimeException("MP3 decoding requires FFI extension: {$path}");
             }
-            $clip = $this->mp3Decoder->decode($path);
         } else {
             $clip = $this->backend->loadWav($path);
         }

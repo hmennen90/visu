@@ -16,17 +16,17 @@ class PlatformPackager
      *
      * @return string Path to the output directory/bundle
      */
-    public function package(string $binaryPath, string $outputDir, string $platform): string
+    public function package(string $binaryPath, string $outputDir, string $platform, string $variant = 'base'): string
     {
         return match ($platform) {
-            'macos' => $this->packageMacOS($binaryPath, $outputDir),
-            'windows' => $this->packageFlat($binaryPath, $outputDir, '.exe'),
-            'linux' => $this->packageFlat($binaryPath, $outputDir, ''),
+            'macos' => $this->packageMacOS($binaryPath, $outputDir, $variant),
+            'windows' => $this->packageFlat($binaryPath, $outputDir, '.exe', 'windows', $variant),
+            'linux' => $this->packageFlat($binaryPath, $outputDir, '', 'linux', $variant),
             default => throw new \RuntimeException("Unsupported platform: {$platform}"),
         };
     }
 
-    private function packageMacOS(string $binaryPath, string $outputDir): string
+    private function packageMacOS(string $binaryPath, string $outputDir, string $variant = 'base'): string
     {
         $name = $this->config->name;
         $appDir = $outputDir . "/{$name}.app";
@@ -44,6 +44,9 @@ class PlatformPackager
         // Copy binary
         copy($binaryPath, $macosDir . '/' . $name);
         chmod($macosDir . '/' . $name, 0755);
+
+        // Copy bundle libs (e.g. libsteam_api.dylib) next to binary
+        $this->copyBundleLibs($macosDir, 'macos');
 
         // Generate Info.plist
         $this->writeInfoPlist($contentsDir);
@@ -63,7 +66,7 @@ class PlatformPackager
         return $appDir;
     }
 
-    private function packageFlat(string $binaryPath, string $outputDir, string $extension): string
+    private function packageFlat(string $binaryPath, string $outputDir, string $extension, string $platform, string $variant = 'base'): string
     {
         $name = $this->config->name;
         $dir = $outputDir . '/' . $name;
@@ -75,6 +78,9 @@ class PlatformPackager
         $targetName = $name . $extension;
         copy($binaryPath, $dir . '/' . $targetName);
         chmod($dir . '/' . $targetName, 0755);
+
+        // Copy bundle libs next to binary
+        $this->copyBundleLibs($dir, $platform);
 
         // Copy external resources alongside binary
         $this->copyExternalResources($dir);
@@ -127,6 +133,28 @@ class PlatformPackager
 XML;
 
         file_put_contents($contentsDir . '/Info.plist', $plist);
+    }
+
+    private function copyBundleLibs(string $targetDir, string $platform): void
+    {
+        $libs = $this->config->bundleLibs[$platform] ?? [];
+        foreach ($libs as $lib) {
+            $src = $lib['src'] ?? '';
+            $optional = $lib['optional'] ?? false;
+
+            // Resolve relative paths against project root
+            if ($src !== '' && $src[0] !== '/') {
+                $src = $this->config->projectRoot . '/' . $src;
+            }
+
+            if (!file_exists($src)) {
+                if ($optional) {
+                    continue;
+                }
+                throw new \RuntimeException("Bundle lib not found: {$src}");
+            }
+            copy($src, $targetDir . '/' . basename($src));
+        }
     }
 
     private function copyExternalResources(string $targetDir): void

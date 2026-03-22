@@ -2,12 +2,16 @@
 
 namespace VISU\UI;
 
+use VISU\Locale\LocaleManager;
+
 class UIDataContext
 {
     /**
      * @var array<string, mixed>
      */
     private array $data = [];
+
+    private ?LocaleManager $localeManager = null;
 
     /**
      * Sets a value at a dot-notation path.
@@ -38,12 +42,30 @@ class UIDataContext
         }
     }
 
+    public function getLocaleManager(): ?LocaleManager
+    {
+        return $this->localeManager;
+    }
+
+    public function setLocaleManager(LocaleManager $localeManager): void
+    {
+        $this->localeManager = $localeManager;
+    }
+
     /**
      * Resolves binding expressions in a string.
      * e.g. "Geld: {economy.money}" -> "Geld: 1500"
+     *
+     * Translation bindings use {t:key} or {t:key|param=value} syntax
+     * and are resolved via the LocaleManager when available.
      */
     public function resolveBindings(string $text): string
     {
+        // Resolve translation expressions first
+        if ($this->localeManager !== null && str_contains($text, '{t:')) {
+            $text = $this->localeManager->resolveTranslations($text);
+        }
+
         return (string) preg_replace_callback('/\{([^}]+)\}/', function (array $matches): string {
             $path = $matches[1];
             $value = $this->get($path);

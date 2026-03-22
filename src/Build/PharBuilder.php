@@ -197,7 +197,8 @@ if (!is_dir(VISU_PATH_FRAMEWORK_RESOURCES)) {
     $__engineLog("Framework resources extracted.");
 }
 
-// Extract game resources (locales, shaders, etc.) from PHAR on first run
+// Extract game resources (locales, shaders, etc.) from PHAR
+// Always overwrite to ensure updates are applied.
 $pharResources = $pharBase . '/resources';
 if (is_dir($pharResources)) {
     $resIterator = new RecursiveIteratorIterator(
@@ -210,7 +211,7 @@ if (is_dir($pharResources)) {
         $targetPath = VISU_PATH_RESOURCES . DS . $relPath;
         if ($resItem->isDir()) {
             @mkdir($targetPath, 0755, true);
-        } elseif (!file_exists($targetPath)) {
+        } else {
             @mkdir(dirname($targetPath), 0755, true);
             copy($resItem->getPathname(), $targetPath);
         }

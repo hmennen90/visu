@@ -13,7 +13,6 @@ class BuildCommand extends Command
     private const TARGETS = [
         'macos-arm64'     => ['platform' => 'macos',   'arch' => 'arm64'],
         'linux-x86_64'    => ['platform' => 'linux',   'arch' => 'x86_64'],
-        'linux-arm64'     => ['platform' => 'linux',   'arch' => 'arm64'],
         'windows-x86_64'  => ['platform' => 'windows', 'arch' => 'x86_64'],
     ];
 
@@ -41,6 +40,16 @@ class BuildCommand extends Command
             'description' => 'Output directory (default: build/)',
             'defaultValue' => '',
         ],
+        'variant' => [
+            'longPrefix'  => 'variant',
+            'description' => 'Build variant: base or steam (default: base)',
+            'defaultValue' => 'base',
+        ],
+        'type' => [
+            'longPrefix'  => 'type',
+            'description' => 'Build type as defined in build.json buildTypes (default: full)',
+            'defaultValue' => 'full',
+        ],
     ];
 
     public function execute(): void
@@ -53,6 +62,19 @@ class BuildCommand extends Command
 
         $microSfxArg = (string) $this->cli->arguments->get('micro-sfx');
         $microSfxPath = $microSfxArg !== '' ? $microSfxArg : null;
+
+        $variant = (string) $this->cli->arguments->get('variant');
+        if (!in_array($variant, ['base', 'steam'], true)) {
+            $this->cli->out("<red>Error:</red> Unknown variant '{$variant}'. Use 'base' or 'steam'.");
+            return;
+        }
+
+        $buildType = (string) $this->cli->arguments->get('type');
+        if ($buildType !== 'full' && !isset($config->buildTypes[$buildType])) {
+            $available = empty($config->buildTypes) ? '(none defined)' : implode(', ', array_keys($config->buildTypes));
+            $this->cli->out("<red>Error:</red> Unknown build type '{$buildType}'. Available: full, {$available}");
+            return;
+        }
 
         $targets = $this->resolveTargets((string) $this->cli->arguments->get('platform'));
 
@@ -83,6 +105,8 @@ class BuildCommand extends Command
             $this->cli->out(str_repeat('-', 50));
             $this->cli->out("  Game:     {$config->name} v{$config->version}");
             $this->cli->out("  Target:   {$targetName}");
+            $this->cli->out("  Variant:  {$variant}");
+            $this->cli->out("  Type:     {$buildType}");
             $this->cli->out("  Output:   {$outputDir}");
             $this->cli->out(str_repeat('-', 50));
             $this->cli->out('');
@@ -93,6 +117,8 @@ class BuildCommand extends Command
                     $outputDir,
                     $microSfxPath,
                     $target['arch'],
+                    $variant,
+                    $buildType,
                 );
                 $results[$targetName] = $result;
 

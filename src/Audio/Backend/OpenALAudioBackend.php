@@ -317,7 +317,7 @@ CDEF;
         $format = $this->getALFormat($clip);
         $len = $clip->getByteLength();
         $pcmData = $clip->pcmData;
-        $pcmBuf = FFI::new("uint8_t[$len]");
+        $pcmBuf = $this->al->new("uint8_t[$len]");
         FFI::memcpy($pcmBuf, $pcmData, $len);
 
         $this->al->alBufferData($bufIdVal, $format, $pcmBuf, $len, $clip->sampleRate);
@@ -362,7 +362,7 @@ CDEF;
             $bufferIds[] = $bufIdVal;
 
             $chunk = substr($clip->pcmData, $offset, $size);
-            $pcmBuf = FFI::new("uint8_t[$size]");
+            $pcmBuf = $this->al->new("uint8_t[$size]");
             FFI::memcpy($pcmBuf, $chunk, $size);
 
             $this->al->alBufferData($bufIdVal, $format, $pcmBuf, $size, $clip->sampleRate);
@@ -440,7 +440,7 @@ CDEF;
             $newBuffers[] = $bufIdVal;
 
             $chunk = substr($clip->pcmData, $offset, $size);
-            $pcmBuf = FFI::new("uint8_t[$size]");
+            $pcmBuf = $this->al->new("uint8_t[$size]");
             FFI::memcpy($pcmBuf, $chunk, $size);
 
             $this->al->alBufferData($bufIdVal, $format, $pcmBuf, $size, $clip->sampleRate);

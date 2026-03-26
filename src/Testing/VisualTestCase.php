@@ -21,6 +21,12 @@ abstract class VisualTestCase extends \PHPUnit\Framework\TestCase
     protected static ?Input $input = null;
     protected static ?Dispatcher $dispatcher = null;
 
+    /**
+     * FakeInput instance for simulating cursor and key events without GLFW.
+     * Reset before each test via resetFakeInput().
+     */
+    protected FakeInput $fakeInput;
+
     protected int $viewportWidth = 800;
     protected int $viewportHeight = 600;
 
@@ -60,6 +66,56 @@ abstract class VisualTestCase extends \PHPUnit\Framework\TestCase
 
             FlyUI::initailize(self::$vgContext, self::$dispatcher, self::$input);
         }
+
+        // Fresh FakeInput per test — cursor at origin, no pressed keys
+        $this->fakeInput = new FakeInput(
+            self::$dispatcher,
+            $this->viewportWidth,
+            $this->viewportHeight,
+        );
+    }
+
+    /**
+     * Inject FakeInput into FlyUI for a single frame.
+     * Use this when you want to test UI interactions (hover, click) without
+     * touching the real GLFW cursor state.
+     *
+     * Example:
+     *   $this->fakeInput->simulateCursorPos(100, 50);
+     *   $this->fakeInput->simulateMouseButton(0, true);
+     *   $png = $this->renderFrameWithFakeInput(function($vg) { ... });
+     */
+    protected function renderFrameWithFakeInput(callable $drawCallback): string
+    {
+        $w = $this->viewportWidth;
+        $h = $this->viewportHeight;
+
+        glViewport(0, 0, $w, $h);
+        glClearColor(0.0, 0.0, 0.0, 1.0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+        $resolution = new Vec2((float) $w, (float) $h);
+
+        self::$vgContext->beginFrame($w, $h, 1.0);
+
+        // Temporarily swap FlyUI's internal input with FakeInput
+        $realInput = self::$input;
+        FlyUI::initailize(self::$vgContext, self::$dispatcher, $this->fakeInput);
+        FlyUI::beginFrame($resolution);
+
+        $drawCallback(self::$vgContext);
+
+        FlyUI::endFrame();
+        self::$vgContext->endFrame();
+
+        // Restore real input
+        FlyUI::initailize(self::$vgContext, self::$dispatcher, $realInput);
+
+        $this->fakeInput->endFrame();
+
+        glFinish();
+
+        return $this->readFramebufferAsPng($w, $h);
     }
 
     /**

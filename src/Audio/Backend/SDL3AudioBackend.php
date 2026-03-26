@@ -172,4 +172,9 @@ class SDL3AudioBackend implements AudioBackendInterface
     {
         return 'SDL3';
     }
+
+    public static function isAvailable(): bool
+    {
+        return class_exists('FFI', false) && class_exists(SDL::class);
+    }
 }

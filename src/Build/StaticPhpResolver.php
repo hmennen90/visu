@@ -203,30 +203,6 @@ class StaticPhpResolver
         return null;
     }
 
-    /**
-     * Find a specific asset download URL from a release
-     */
-    private function findAssetUrl(string $releaseApiUrl, string $assetName): ?string
-    {
-        $json = $this->httpGet($releaseApiUrl);
-        if ($json === null) {
-            return null;
-        }
-
-        $release = json_decode($json, true);
-        if (!is_array($release) || !isset($release['assets'])) {
-            return null;
-        }
-
-        foreach ($release['assets'] as $asset) {
-            if (($asset['name'] ?? '') === $assetName) {
-                return $asset['browser_download_url'] ?? null;
-            }
-        }
-
-        return null;
-    }
-
     private function removeDir(string $dir): void
     {
         $it = new \RecursiveIteratorIterator(
@@ -258,19 +234,6 @@ class StaticPhpResolver
 
         $result = @file_get_contents($url, false, $context);
         return $result !== false ? $result : null;
-    }
-
-    /**
-     * Check the build cache for a micro.sfx binary
-     */
-    private function getCachedPath(string $platform, string $arch): ?string
-    {
-        $path = $this->cacheDir . "/{$platform}-{$arch}/micro.sfx";
-        if (file_exists($path)) {
-            return $path;
-        }
-
-        return null;
     }
 
     /**

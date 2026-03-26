@@ -45,10 +45,9 @@ class BuildCommandTest extends TestCase
         $ref->setAccessible(true);
 
         $targets = $ref->invoke($command, 'all');
-        $this->assertCount(4, $targets);
+        $this->assertCount(3, $targets);
         $this->assertArrayHasKey('macos-arm64', $targets);
         $this->assertArrayHasKey('linux-x86_64', $targets);
-        $this->assertArrayHasKey('linux-arm64', $targets);
         $this->assertArrayHasKey('windows-x86_64', $targets);
     }
 
@@ -72,9 +71,8 @@ class BuildCommandTest extends TestCase
         $ref->setAccessible(true);
 
         $targets = $ref->invoke($command, 'linux');
-        $this->assertCount(2, $targets);
+        $this->assertCount(1, $targets);
         $this->assertArrayHasKey('linux-x86_64', $targets);
-        $this->assertArrayHasKey('linux-arm64', $targets);
     }
 
     public function testResolveTargetsUnknownThrows(): void

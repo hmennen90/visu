@@ -49,4 +49,9 @@ interface AudioBackendInterface
      * Get the backend name for debugging.
      */
     public function getName(): string;
+
+    /**
+     * Check if this audio backend is available on the current system.
+     */
+    public static function isAvailable(): bool;
 }

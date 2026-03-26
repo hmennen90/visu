@@ -139,7 +139,7 @@ XML;
     {
         $libs = $this->config->bundleLibs[$platform] ?? [];
         foreach ($libs as $lib) {
-            $src = $lib['src'] ?? '';
+            $src = $lib['src'];
             $optional = $lib['optional'] ?? false;
 
             // Resolve relative paths against project root

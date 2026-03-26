@@ -216,12 +216,15 @@ class GameBuilder
         }
 
         $content = file_get_contents($file);
+        if ($content === false) {
+            return;
+        }
         foreach ($constants as $name => $value) {
             $phpValue = var_export($value, true);
             // Match: define('NAME', <anything>) or define("NAME", <anything>)
             $pattern = "/(define\(\s*['\"]" . preg_quote($name, '/') . "['\"]\s*,\s*).+?(\))/";
             $replacement = '${1}' . $phpValue . '${2}';
-            $content = preg_replace($pattern, $replacement, $content);
+            $content = preg_replace($pattern, $replacement, $content) ?? $content;
         }
         file_put_contents($file, $content);
     }

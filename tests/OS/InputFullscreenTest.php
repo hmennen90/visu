@@ -84,8 +84,13 @@ class InputFullscreenTest extends GLContextTestCase
         $this->input->handleWindowMouseButton($window, GLFW_MOUSE_BUTTON_LEFT, GLFW_PRESS, 0);
         $this->assertFalse($this->input->hasMouseButtonBeenPressedThisFrame(GLFW_MOUSE_BUTTON_LEFT));
 
-        // frame 2 — counter reaches 0, suppression ends
+        // frame 2 — counter reaches 0, suppression ends but post-suppression guard activates
         $this->input->endFrame();
+        // Post-suppression guard blocks PRESS events (phantom protection).
+        // A RELEASE on any button disables the guard immediately so the next real click works.
+        $this->input->handleWindowMouseButton($window, GLFW_MOUSE_BUTTON_RIGHT, GLFW_RELEASE, 0);
+
+        // Now a real click should work
         $this->input->handleWindowMouseButton($window, GLFW_MOUSE_BUTTON_LEFT, GLFW_PRESS, 0);
         $this->assertTrue($this->input->hasMouseButtonBeenPressedThisFrame(GLFW_MOUSE_BUTTON_LEFT));
     }
@@ -111,7 +116,7 @@ class InputFullscreenTest extends GLContextTestCase
 
     // -- State preservation during suppression -----------------------------------
 
-    public function testSuppressionPreservesExistingMouseState(): void
+    public function testSuppressionClearsExistingMouseState(): void
     {
         $window = $this->createWindow();
 
@@ -120,10 +125,11 @@ class InputFullscreenTest extends GLContextTestCase
         $this->assertSame(GLFW_PRESS, $this->input->getMouseButtonState(GLFW_MOUSE_BUTTON_LEFT));
 
         // fullscreen toggle — suppress events
+        // Suppression intentionally clears all mouse button states to prevent
+        // stuck buttons (the release callback would be dropped during suppression).
         $this->input->suppressInputEvents(3);
 
-        // button state should still report PRESS (no false release)
-        $this->assertSame(GLFW_PRESS, $this->input->getMouseButtonState(GLFW_MOUSE_BUTTON_LEFT));
+        $this->assertSame(GLFW_RELEASE, $this->input->getMouseButtonState(GLFW_MOUSE_BUTTON_LEFT));
     }
 
     public function testSuppressionPreservesExistingKeyEvents(): void
@@ -160,9 +166,8 @@ class InputFullscreenTest extends GLContextTestCase
         $this->assertFalse($this->input->hasMouseButtonBeenPressedThisFrame(GLFW_MOUSE_BUTTON_RIGHT));
         $this->assertFalse($this->input->hasKeyBeenPressedThisFrame(GLFW_KEY_SPACE));
 
-        // mouse button callback-tracked state remains intact
-        $this->assertSame(GLFW_PRESS, $this->input->getMouseButtonState(GLFW_MOUSE_BUTTON_RIGHT));
-        // key state uses GLFW polling — not affected by suppression
+        // mouse button state is also cleared (prevents stuck buttons when release is dropped)
+        $this->assertSame(GLFW_RELEASE, $this->input->getMouseButtonState(GLFW_MOUSE_BUTTON_RIGHT));
     }
 
     // -- No phantom artifacts after rapid fullscreen toggle ----------------------
@@ -216,10 +221,14 @@ class InputFullscreenTest extends GLContextTestCase
         $this->input->handleWindowMouseButton($window, GLFW_MOUSE_BUTTON_LEFT, GLFW_PRESS, 0);
         $this->assertFalse($this->input->hasMouseButtonBeenPressedThisFrame(GLFW_MOUSE_BUTTON_LEFT));
 
-        // end frame — suppression expires
+        // end frame — suppression expires, post-suppression guard activates
         $this->input->endFrame();
 
-        // real click — should work normally
+        // Post-suppression guard blocks PRESS but allows RELEASE.
+        // Send a RELEASE (on right button to avoid click-distance logic) to clear the guard.
+        $this->input->handleWindowMouseButton($window, GLFW_MOUSE_BUTTON_RIGHT, GLFW_RELEASE, 0);
+
+        // real click — should work normally now
         $this->input->handleWindowMouseButton($window, GLFW_MOUSE_BUTTON_LEFT, GLFW_PRESS, 0);
         $this->assertTrue($this->input->hasMouseButtonBeenPressedThisFrame(GLFW_MOUSE_BUTTON_LEFT));
         $this->assertSame(GLFW_PRESS, $this->input->getMouseButtonState(GLFW_MOUSE_BUTTON_LEFT));

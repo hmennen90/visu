@@ -64,6 +64,11 @@ class AudioManagerTest extends TestCase
             {
                 return 'Mock';
             }
+
+            public static function isAvailable(): bool
+            {
+                return true;
+            }
         };
     }
 

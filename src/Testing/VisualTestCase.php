@@ -85,6 +85,15 @@ abstract class VisualTestCase extends \PHPUnit\Framework\TestCase
      *   $this->fakeInput->simulateMouseButton(0, true);
      *   $png = $this->renderFrameWithFakeInput(function($vg) { ... });
      */
+    /**
+     * Inject FakeInput into FlyUI for a single frame and render it.
+     *
+     * Preserves viewportOffset and viewportSize across the FlyUI re-initialize
+     * so that tests can set those properties before calling this method.
+     *
+     * Does NOT advance the FakeInput frame (endFrame) — the caller controls
+     * when to advance so multi-frame click sequences work correctly.
+     */
     protected function renderFrameWithFakeInput(callable $drawCallback): string
     {
         $w = $this->viewportWidth;
@@ -96,11 +105,17 @@ abstract class VisualTestCase extends \PHPUnit\Framework\TestCase
 
         $resolution = new Vec2((float) $w, (float) $h);
 
+        // Save viewport properties so they survive the FlyUI re-initialize below
+        $savedOffset = FlyUI::$instance->viewportOffset;
+        $savedSize   = FlyUI::$instance->viewportSize;
+
         self::$vgContext->beginFrame($w, $h, 1.0);
 
-        // Temporarily swap FlyUI's internal input with FakeInput
-        $realInput = self::$input;
+        // Swap FlyUI input to FakeInput for this frame
         FlyUI::initailize(self::$vgContext, self::$dispatcher, $this->fakeInput);
+        FlyUI::$instance->viewportOffset = $savedOffset;
+        FlyUI::$instance->viewportSize   = $savedSize;
+
         FlyUI::beginFrame($resolution);
 
         $drawCallback(self::$vgContext);
@@ -108,10 +123,12 @@ abstract class VisualTestCase extends \PHPUnit\Framework\TestCase
         FlyUI::endFrame();
         self::$vgContext->endFrame();
 
-        // Restore real input
-        FlyUI::initailize(self::$vgContext, self::$dispatcher, $realInput);
-
-        $this->fakeInput->endFrame();
+        // Restore real input, keeping the viewport properties consistent
+        $savedOffset = FlyUI::$instance->viewportOffset;
+        $savedSize   = FlyUI::$instance->viewportSize;
+        FlyUI::initailize(self::$vgContext, self::$dispatcher, self::$input);
+        FlyUI::$instance->viewportOffset = $savedOffset;
+        FlyUI::$instance->viewportSize   = $savedSize;
 
         glFinish();
 

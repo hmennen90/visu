@@ -10,6 +10,7 @@ use GL\VectorGraphics\VGContext;
 use VISU\FlyUI\Exception\FlyUiInitException;
 use VISU\Instrument\Clock;
 use VISU\OS\Input;
+use VISU\OS\InputInterface;
 use VISU\OS\Key;
 use VISU\Signal\Dispatcher;
 
@@ -31,7 +32,7 @@ class FlyUI
     /**
      * Initializes the global FlyUI instance
      */
-    public static function initailize(VGContext $vgContext, Dispatcher $dispatcher, Input $input) : void {
+    public static function initailize(VGContext $vgContext, Dispatcher $dispatcher, Input|InputInterface $input) : void {
         self::$instance = new FlyUI($vgContext, $dispatcher, $input);
 
         if ($vgContext->createFont('inter-regular', VISU_PATH_FRAMEWORK_RESOURCES_FONT . '/inter/Inter-Regular.ttf') === -1) {
@@ -338,9 +339,9 @@ class FlyUI
      */
     public function __construct(
         private VGContext $vgContext,
-        /** @phpstan-ignore-next-line */ 
+        /** @phpstan-ignore-next-line */
         private Dispatcher $dispatcher,
-        private Input $input,
+        private Input|InputInterface $input,
         ?FUITheme $theme = null
     )
     {

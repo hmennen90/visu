@@ -189,6 +189,7 @@ class Input implements WindowEventHandlerInterface, InputInterface
     ) {
         $this->glfwWindowHandle = $window->getGLFWHandle();
         $this->lastCursorPosition = new Vec2(0.0, 0.0);
+        $this->lastLeftMouseDownPosition = new Vec2(0.0, 0.0);
     }
 
     /**

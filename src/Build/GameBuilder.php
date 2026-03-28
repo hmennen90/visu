@@ -64,7 +64,9 @@ class GameBuilder
             $fileCount = $this->countFiles($stagingDir);
             $this->log('success', "Staged {$fileCount} files");
 
-            // Phase 2b: Apply build type constant overrides
+            // Phase 2b: Inject version and apply build type constant overrides
+            $this->applyBuildTypeConstants($stagingDir, ['GAME_VERSION' => $this->config->version]);
+            $this->log('info', "Set GAME_VERSION to {$this->config->version}");
             if ($buildType !== 'full' && isset($this->config->buildTypes[$buildType]['constants'])) {
                 $this->applyBuildTypeConstants($stagingDir, $this->config->buildTypes[$buildType]['constants']);
                 $this->log('info', "Applied build type '{$buildType}' constants");
